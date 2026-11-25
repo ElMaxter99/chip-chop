@@ -53,7 +53,7 @@
       if (tools.length && missing.length) {
         out.push('<div class="banner ' + (anyOk ? "wa" : "er") + '" role="status"><div class="grow"><b>' + (anyOk ? "Alguna etapa usa una herramienta de IA que no está instalada" : "Falta Claude Code o GitHub Copilot") + '</b><div class="small">' + (anyOk
           ? "Las etapas por defecto usan <code>" + esc(missing.join(", ")) + "</code>. Cambia el proveedor en la pestaña <a href=\"#\" data-tab=\"ia\">IA</a> o instala la que falta."
-          : "La etapa por defecto usa <code>" + esc(missing.join(", ")) + "</code> y no se encuentra en tu PATH. Instala Claude Code (<code>npm install -g @anthropic-ai/claude-code</code>) o GitHub Copilot CLI (<code>npm install -g @github/copilot</code>), inicia sesión una vez en una terminal y reabre Chip Chop. Sin IA puedes seguir capturando y comparando, pero no generar el catálogo.") + "</div></div></div>");
+          : "La etapa por defecto usa <code>" + esc(missing.join(", ")) + "</code> y no se encuentra en tu PATH. Instala Claude Code (<code>" + (S.os === "win32" ? "irm https://claude.ai/install.ps1 | iex" : "curl -fsSL https://claude.ai/install.sh | bash") + "</code>) o GitHub Copilot CLI (<code>" + (S.os === "win32" ? "winget install GitHub.Copilot" : "npm install -g @github/copilot") + "</code>), inicia sesión una vez en una terminal y reabre Chip Chop. Sin IA puedes seguir capturando y comparando, pero no generar el catálogo.") + "</div></div></div>");
       }
     }
     return out.join("");
