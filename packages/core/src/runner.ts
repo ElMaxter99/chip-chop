@@ -1,5 +1,5 @@
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -176,8 +176,9 @@ export async function prepareTarget(opts: PrepareOptions): Promise<PreparedTarge
   const ref = target.ref;
   if (!ref) throw new Error(`target "${target.label}" needs a ref or a url`);
 
-  const gitRoot = git(hostAppDir, ["rev-parse", "--show-toplevel"]);
-  const rel = relative(gitRoot, hostAppDir);
+  // Windows may mix 8.3 short names (RUNNER~1) and long names; resolve both sides to the same form.
+  const gitRoot = realpathSync.native(git(hostAppDir, ["rev-parse", "--show-toplevel"]));
+  const rel = relative(gitRoot, realpathSync.native(hostAppDir));
   const commit = git(hostAppDir, ["rev-parse", "--short", ref]);
   const worktree = mkdtempSync(join(tmpdir(), "chip-chop-wt-"));
   log(`checking out ${ref} (${commit})`);
