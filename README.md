@@ -76,7 +76,11 @@ Comprueba que todo está bien con `chip-chop doctor` (o en **Ajustes** de la app
 
 ### 0. Abre la app
 
-Al abrir la app de escritorio ves **Inicio**: tus proyectos, el uso de IA y los ajustes. Al principio está vacío; **Añadir proyecto…** (o arrastra una carpeta encima, o pásala como argumento al ejecutable de la app).
+La primera vez la app te hace una **configuración inicial**: descarga el navegador de capturas (con su progreso) y te pide elegir tu herramienta de IA y el modelo de cada etapa. Se guarda sola y, cuando todo está bien, pulsas **Empezar** (o «Configurar la IA más tarde»).
+
+![Configuración inicial](docs/screenshots/home-configuracion-inicial.png)
+
+Después ves **Inicio**: tus proyectos, el uso de IA y los ajustes. Al principio está vacío; **Añadir proyecto…** (o arrastra una carpeta encima, o pásala como argumento al ejecutable de la app).
 
 ![Inicio vacío](docs/screenshots/home-vacio.png)
 
@@ -92,9 +96,11 @@ Abre `.chipchop/config.yaml` y revisa **cómo se compila y se sirve tu app** (co
 
 ### 2. Deja que la IA prepare el catálogo
 
-Pestaña **IA**: elige la herramienta (Claude Code, Copilot u OpenAI Codex; se ve cuál está instalada y dónde) y el modelo de cada etapa (descubrir estados, flujos, mocks, reparar). El modelo sale de una lista —la de Copilot se lee de `copilot help`; la de Claude va incluida— y siempre puedes escribir otro con «Otro…». Puedes mezclar, p. ej. un modelo potente para descubrir y uno barato para los flujos. chip-chop busca las herramientas en el PATH, en el PATH del sistema y en las carpetas habituales de instalación; si aun así no la encuentra, indica la ruta completa en `command:` de `ai.yaml`.
+Pestaña **IA** (lo que cambies se guarda solo y lo confirma un aviso): elige la herramienta (Claude Code, Copilot u OpenAI Codex; se ve cuál está instalada y dónde) y el modelo de cada etapa (descubrir estados, flujos, mocks, reparar). El modelo sale de una lista —la de Copilot se lee de `copilot help`; la de Claude va incluida— y siempre puedes escribir otro con «Otro…». Puedes mezclar, p. ej. un modelo potente para descubrir y uno barato para los flujos. chip-chop busca las herramientas en el PATH, en el PATH del sistema y en las carpetas habituales de instalación; si aun así no la encuentra, indica la ruta completa en `command:` de `ai.yaml`.
 
 ![IA en la app local](docs/screenshots/ui-ia.png)
+
+**Probar esta etapa** abre una ventana que explica qué hace (localiza el programa, le manda una petición mínima sin permisos de escritura ni de comandos y comprueba la respuesta), muestra el tiempo y el resultado, y qué comando se ejecutó. Si la herramienta o el modelo elegido dejan de estar disponibles, chip-chop **no lanza la IA** y te lleva a esta pestaña para que lo dejes bien.
 
 Por terminal: `chip-chop ai test claude` comprueba que el CLI responde y `chip-chop ai run` ejecuta las etapas. Con `--dry-run` imprime los comandos sin ejecutarlos. La configuración global vive en `~/.chipchop/ai.yaml` y cada proyecto puede sobrescribirla con su `.chipchop/ai.yaml`.
 
@@ -239,7 +245,7 @@ Cámbialo en **Ajustes** o con `chip-chop update channel latest`. Los borradores
 
 Probado en CI (Linux y Windows): motor, CLI, interfaz, demos de AngularJS y estática, actualizador contra releases simuladas y arranque del paquete de escritorio.
 
-**Sin probar** (no lo des por hecho): el proveedor de OpenAI Codex y la lectura de modelos de `copilot help` (solo con tests unitarios); macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
+**Sin probar** (no lo des por hecho): el proveedor de OpenAI Codex y la lectura de modelos de `copilot help` (solo con tests unitarios); la configuración inicial de la app de escritorio (solo con datos de ejemplo); macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
 
 ## Desarrollo y releases
 

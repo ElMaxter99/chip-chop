@@ -131,7 +131,7 @@ function fixPath() {
 async function loadCore() {
   const url = (f) => pathToFileURL(path.join(coreDir, "dist", f)).href;
   const [server, updater, ai, doctor, init, aiInfo] = await Promise.all([import(url("server.js")), import(url("updater.js")), import(url("ai.js")), import(url("doctor.js")), import(url("init.js")), import(url("aiInfo.js"))]);
-  return { startUi: server.startUi, checkForUpdate: updater.checkForUpdate, getChannel: updater.getChannel, setChannel: updater.setChannel, currentVersion: updater.currentVersion, loadAiConfig: ai.loadAiConfig, globalAiPath: ai.globalAiPath, doctor: doctor.doctor, aiInfo: aiInfo.aiInfo, initProject: init.initProject };
+  return { startUi: server.startUi, checkForUpdate: updater.checkForUpdate, getChannel: updater.getChannel, setChannel: updater.setChannel, currentVersion: updater.currentVersion, loadAiConfig: ai.loadAiConfig, globalAiPath: ai.globalAiPath, doctor: doctor.doctor, aiInfo: aiInfo.aiInfo, aiProblems: aiInfo.aiProblems, initProject: init.initProject };
 }
 
 // ───────── Chromium (Playwright): se descarga la primera vez, desde la pantalla de Inicio ─────────
@@ -323,12 +323,15 @@ async function homeState(refreshAi = false) {
   let ai = { providers: {}, stages: {}, globalPath: core.globalAiPath(), error: "" };
   try {
     const cfg = core.loadAiConfig(app.getPath("userData"));
-    ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath(), error: "", info: await core.aiInfo(cfg, refreshAi).catch(() => ({})) };
+    ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath(), error: "", info: {}, problems: [] };
+    ai.info = await core.aiInfo(cfg, refreshAi).catch(() => ({}));
+    ai.problems = core.aiProblems(cfg, ai.info);
   } catch (e) {
     ai.error = String(e?.message ?? e) || aiError; // el ai.yaml global está mal escrito: la pantalla de IA lo explica
   }
   return {
     smoke: SMOKE,
+    setupDone: SMOKE || Boolean(readState().setupDone) || projects().length > 0,
     os: process.platform,
     version: app.getVersion(),
     platform: `${process.platform} ${process.arch}`,
@@ -377,6 +380,8 @@ function initProjectIn(dir, framework) {
 }
 
 function registerIpc() {
+  ipcMain.handle("home:finishSetup", () => writeState({ setupDone: true }));
+  ipcMain.handle("home:aiInfo", async () => { const cfg = core.loadAiConfig(app.getPath("userData")); const info = await core.aiInfo(cfg, true); return { info, problems: core.aiProblems(cfg, info) }; });
   ipcMain.handle("home:state", (_e, opts) => homeState(Boolean(opts && opts.refreshAi)));
   ipcMain.handle("home:addProject", async () => {
     const r = await dialog.showOpenDialog(win, { title: "Elige la carpeta del proyecto (la app que quieres auditar)", properties: ["openDirectory", "createDirectory"] });

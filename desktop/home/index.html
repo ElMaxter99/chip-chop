@@ -29,6 +29,7 @@ nav [role=tab]:focus-visible,.ver:focus-visible{outline:3px solid var(--sf);outl
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 body.dropping::after{content:"Suelta la carpeta de tu app para añadirla";position:fixed;inset:12px;z-index:10;display:grid;place-items:center;border:4px dashed var(--ac);border-radius:12px;background:rgba(241,223,184,.92);font:800 22px "Bricolage Grotesque",sans-serif;color:var(--ink)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+body:not(.setup) #setup{display:none}body.setup #tabs,body.setup #browser,body.setup .tab{display:none}body.setup #ver{pointer-events:none}.setup-view{display:flex;flex-direction:column;gap:20px}
 </style>
 </head>
 <body>
@@ -39,6 +40,7 @@ body.dropping::after{content:"Suelta la carpeta de tu app para añadirla";positi
   <button id="ver" class="ver" data-tab="ajustes" aria-label="Versión instalada; abrir Ajustes">v…</button>
 </div></header>
 <main id="main" tabindex="-1">
+  <section id="setup" class="setup-view" aria-live="polite"></section>
   <section id="browser" role="status" aria-live="polite"></section>
   <section id="proyectos" class="tab" role="tabpanel" aria-labelledby="tab-proyectos"></section>
   <section id="ia" class="tab" role="tabpanel" aria-labelledby="tab-ia" hidden></section>

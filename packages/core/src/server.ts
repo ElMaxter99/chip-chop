@@ -8,7 +8,7 @@ import { failureReasons, reportDir } from "./compare.js";
 import { currentVersion } from "./updater.js";
 import type { Report } from "./types.js";
 import { doctor } from "./doctor.js";
-import { aiInfo } from "./aiInfo.js";
+import { aiInfo, aiProblems } from "./aiInfo.js";
 import { exists, writeText } from "./fsutil.js";
 import { initProject } from "./init.js";
 import { runCapture, runCompare } from "./pipeline.js";
@@ -183,6 +183,10 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
       }
       if (u.pathname === "/api/ai/run" && req.method === "POST") {
         const b = await body(req);
+        // Sin una herramienta y un modelo utilizables no se lanza nada: la interfaz lleva al usuario a la configuración de IA.
+        const cfgNow = loadAiConfig(appDir);
+        const probs = aiProblems(cfgNow, await aiInfo(cfgNow, true), Array.isArray(b.stages) ? (b.stages as string[]) : undefined);
+        if (probs.length && !b.dryRun) return void send(res, 409, { error: `La configuración de IA necesita atención: ${probs.map((p) => `${p.stage}: ${p.message}`).join("; ")}`, code: "ai-config", problems: probs });
         const job = start("ai", async (log) => runAi({ appDir, log, ...(Array.isArray(b.stages) ? { stages: b.stages as StageName[] } : {}), ...(b.extra ? { extra: String(b.extra) } : {}), dryRun: !!b.dryRun }));
         return void send(res, 200, { job: job.id });
       }

@@ -82,3 +82,29 @@ export async function aiInfo(cfg: ReturnType<typeof loadAiConfig>, force = false
   );
   return out;
 }
+
+export interface AiProblem {
+  stage: string;
+  provider: string;
+  model?: string;
+  reason: "tool-missing" | "model-unknown";
+  message: string;
+}
+
+/**
+ * Qué impide usar la IA con la configuración actual: una etapa apunta a una herramienta que no se encuentra, o a un modelo
+ * que la propia herramienta no lista (solo se puede afirmar cuando la lista salió del CLI; las incluidas pueden quedarse atrás).
+ */
+export function aiProblems(cfg: ReturnType<typeof loadAiConfig>, info: Record<string, ProviderInfo>, only?: string[]): AiProblem[] {
+  const out: AiProblem[] = [];
+  for (const [stage, sc] of Object.entries(cfg.stages)) {
+    if (!sc || (only && !only.includes(stage))) continue;
+    const i = info[sc.provider];
+    if (!i || !i.found) {
+      out.push({ stage, provider: sc.provider, reason: "tool-missing", message: `«${sc.provider}» no está instalada o no se encuentra` });
+    } else if (sc.model && i.models.source === "cli" && i.models.options.length && !i.models.options.some((o) => o.value === sc.model)) {
+      out.push({ stage, provider: sc.provider, model: sc.model, reason: "model-unknown", message: `el modelo «${sc.model}» ya no está disponible en ${sc.provider}` });
+    }
+  }
+  return out;
+}

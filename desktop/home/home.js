@@ -102,6 +102,8 @@
   function warnings() {
     var out = [], git = check(function (c) { return c.name === "git"; });
     if (git && !git.ok) out.push('<div class="banner er" role="status"><div class="grow"><b>Falta git</b><div class="small">Chip Chop lo necesita para sacar cada versión de tu app (ramas, etiquetas) sin tocar tu carpeta de trabajo. ' + (GIT_HOWTO[S.os] || GIT_HOWTO.linux) + " Después cierra y vuelve a abrir Chip Chop.</div></div></div>");
+    var badModel = (S.ai.problems || []).filter(function (p) { return /modelo/.test(p.message); });
+    if (badModel.length) out.push('<div class="banner er" role="status"><div class="grow"><b>Hay que revisar la configuración de IA</b><div class="small">' + badModel.map(function (p) { return esc(p.stage) + ": " + esc(p.message); }).join("; ") + '. Hasta que lo cambies, la IA no se usará. <a href="#" data-tab="ia">Ir a IA</a></div></div></div>');
     if (!S.ai.error) {
       var tools = (S.checks || []).filter(function (c) { return c.name.indexOf("ai:") === 0; });
       var okName = {}; tools.forEach(function (c) { if (c.ok) okName[providerName(c)] = 1; });
@@ -175,24 +177,37 @@
   }
 
   // ---------- IA ----------
+  // Lista de herramientas detectadas (se repinta cuando una búsqueda trae datos nuevos).
+  function toolsHtml(info) {
+    return Object.keys(info).map(function (n) { var i = info[n]; return '<div class="kv"><span>' + esc(n) + ' <span class="small mut">(' + esc(i.command) + ")</span></span><span>" + badge(i.found ? "instalada" : "no encontrada", i.found ? "ok" : "wa") + ' <span class="small mut">' + esc(i.found ? (i.version || "") + " · " + i.found.path : "no está en el PATH ni en las carpetas habituales de instalación") + "</span></span></div>"; }).join("") || '<span class="mut">Ninguna.</span>';
+  }
+  // Editor de IA con autoguardado: lo usan la pestaña IA y la configuración inicial.
+  function mountAiEditor(host, toolsHost) {
+    var info = S.ai.info || {};
+    if (!window.ChipAi) { host.innerHTML = '<div class="banner er">No se pudo cargar el editor de IA. Cierra y vuelve a abrir Chip Chop.</div>'; return; }
+    var opts = {
+      stages: STAGES, cfg: { providers: S.ai.providers, stages: S.ai.stages }, info: info,
+      refresh: function () { return api.invoke("home:aiInfo").then(function (r) { S.ai.info = r.info; S.ai.problems = r.problems; if (onAiSaved) onAiSaved(); if (toolsHost) toolsHost.innerHTML = toolsHtml(r.info); return r; }); },
+      onProblems: function (list) { S.ai.problems = list; if (onAiSaved) onAiSaved(); },
+      save: function (stages) { return api.invoke("home:saveAi", stages).then(function () { S.ai.stages = stages; S.ai.problems = ChipAi.problems(stages, S.ai.info || {}); if (onAiSaved) onAiSaved(); }); }
+    };
+    host.innerHTML = ChipAi.rows(opts);
+    ChipAi.bind(host, opts);
+  }
+  var onAiSaved = null;
   function renderAi() {
-    var ok = S.checks.filter(function (c) { return c.name.indexOf("ai:") === 0; });
     if (S.ai.error) {
       $("ia").innerHTML = '<div><h1>Inteligencia artificial</h1></div><div class="banner er" role="alert" data-ai-error><div class="grow"><b>No se puede leer la configuración de IA</b><div class="small">El archivo <code>' + esc(S.ai.globalPath) + '</code> tiene un error y Chip Chop no puede mostrarlo ni guardarlo:</div><pre class="log" style="margin-top:8px">' + esc(S.ai.error) + '</pre><div class="small" style="margin-top:8px">Corrígelo con un editor de texto (es YAML: cuida las sangrías y los dos puntos) o bórralo para volver a los valores por defecto, y pulsa Recargar.</div></div><button class="btn p" id="reloadAi">Recargar</button></div>';
       $("reloadAi").onclick = function () { load().catch(fail); };
       return;
     }
     var info = S.ai.info || {};
-    if (!window.ChipAi) { $("ia").innerHTML = warnings() + '<div class="banner er">No se pudo cargar el editor de IA. Cierra y vuelve a abrir Chip Chop.</div>'; return; }
-    $("ia").innerHTML = warnings() + '<div><h1>Inteligencia artificial</h1><p class="sub">Chip Chop no trae IA propia: usa la herramienta de línea de comandos que ya tengas (Claude Code, GitHub Copilot u OpenAI Codex) para leer el código de tu app y escribir su catálogo de estados. Estos valores son los de partida para todos los proyectos; cada proyecto puede cambiarlos en su pestaña IA.</p></div>' +
-      '<div class="card"><div class="row"><h2 class="grow" style="margin:0">Herramientas detectadas</h2><button class="btn" id="rescan">Volver a buscar</button></div>' + (Object.keys(info).map(function (n) { var i = info[n]; return '<div class="kv"><span>' + esc(n) + ' <span class="small mut">(' + esc(i.command) + ")</span></span><span>" + badge(i.found ? "instalada" : "no encontrada", i.found ? "ok" : "wa") + ' <span class="small mut">' + esc(i.found ? (i.version || "") + " · " + i.found.path : "no está en el PATH ni en las carpetas habituales de instalación") + "</span></span></div>"; }).join("") || ok.map(function (c) { return '<div class="kv"><span>' + esc(c.name.replace("ai: ", "")) + "</span><span>" + badge(c.ok ? "instalada" : "no instalada", c.ok ? "ok" : "wa") + ' <span class="small mut">' + esc(tr(c.detail)) + "</span></span></div>"; }).join("") || '<span class="mut">Ninguna.</span>') + "</div>" +
-      '<div class="card"><h2>Qué herramienta y modelo usa cada etapa</h2>' + ChipAi.rows({ stages: STAGES, cfg: { providers: S.ai.providers, stages: S.ai.stages }, info: info }) + '<div class="row" style="margin-top:12px"><button class="btn p" id="saveAi">Guardar</button><span id="aiMsg" class="small mut" role="status"></span></div>' +
-      '<p class="small mut" style="margin-bottom:0">Se guarda en <code>' + esc(S.ai.globalPath) + "</code>. Sobre el consumo: Chip Chop no lo mide; lo contabiliza tu proveedor (Claude o Copilot) en su propia cuenta.</p></div>";
-    ChipAi.bind($("ia"), { info: info });
-    $("rescan").onclick = function () { var b = $("rescan"); b.disabled = true; b.textContent = "Buscando…"; api.invoke("home:state", { refreshAi: true }).then(function (s) { S = s; render(); }, fail); };
-    $("saveAi").onclick = function () {
-      api.invoke("home:saveAi", ChipAi.collect($("ia"))).then(function () { $("aiMsg").textContent = "Guardado."; }, fail);
-    };
+    $("ia").innerHTML = warnings() + '<div><h1>Inteligencia artificial</h1><p class="sub">Chip Chop no trae IA propia: usa la herramienta de línea de comandos que ya tengas (Claude Code, GitHub Copilot u OpenAI Codex) para leer el código de tu app y escribir su catálogo de estados. Estos valores son los de partida para todos los proyectos; cada proyecto puede cambiarlos en su pestaña IA. Lo que cambies se guarda solo.</p></div>' +
+      '<div class="card"><h2>Herramientas detectadas</h2><div id="aiTools">' + toolsHtml(info) + '</div></div>' +
+      '<div class="card"><h2>Qué herramienta y modelo usa cada etapa</h2><div id="aiEd"></div>' +
+      '<p class="small mut" style="margin-bottom:0">Se guarda en <code>' + esc(S.ai.globalPath) + "</code>. Sobre el consumo: Chip Chop no lo mide; lo contabiliza tu proveedor (Claude, Copilot u OpenAI) en su propia cuenta.</p></div>";
+    onAiSaved = null;
+    mountAiEditor($("aiEd"), $("aiTools"));
   }
 
   // ---------- ajustes ----------
@@ -221,8 +236,33 @@
     $("docs").onclick = function (e) { e.preventDefault(); api.invoke("home:openExternal", "https://github.com/ElMaxter99/chip-chop"); };
   }
 
+  // ---------- configuración inicial (primera vez) ----------
+  function renderSetup() {
+    document.body.classList.add("setup");
+    var c = S.chromium, ai = S.ai;
+    var chrom = c.installed ? badge("Listo", "ok") : installingChromium ? '<div><b><span class="spin"></span>Descargando el navegador de capturas…</b><div class="small mut">Chip Chop usa su propio Chromium para fotografiar tu app sin tocar tu navegador. Se descarga una sola vez (unos 150 MB) y puede tardar un par de minutos.</div><pre class="log" id="chromiumLog" style="margin-top:8px">' + esc(chromiumLog) + '</pre></div>' : chromiumFailed ? '<div class="banner er"><div class="grow"><b>No se pudo descargar el navegador</b><div class="small">Comprueba la conexión (o el proxy) y reintenta.</div></div><button class="btn p" id="dlChromium">Reintentar</button></div>' : badge("Preparando…", "wa");
+    $("setup").innerHTML = '<div><h1>Vamos a dejarlo listo</h1><p class="sub">Dos cosas antes de empezar: el navegador con el que se hacen las capturas y la IA que preparará el catálogo de tu app. Solo se hace una vez; después puedes cambiarlo en Ajustes e IA.</p></div>' +
+      '<div class="card"><div class="row"><span class="num">1</span><div class="grow"><b>Navegador de capturas</b></div></div><div style="margin-top:12px">' + chrom + '</div></div>' +
+      '<div class="card"><div class="row"><span class="num">2</span><div class="grow"><b>Tu herramienta de IA</b><div class="small mut">Elige la que ya tengas (Claude Code, GitHub Copilot u OpenAI Codex) y el modelo de cada etapa. Se guarda solo.</div></div></div>' + (ai.error ? '<div class="banner er" style="margin-top:12px">El archivo ' + esc(ai.globalPath) + ' tiene un error: corrígelo y pulsa Recargar. <button class="btn" id="reloadSetup">Recargar</button></div>' : warnings() + '<div id="aiTools" style="margin:12px 0">' + toolsHtml(ai.info || {}) + '</div><div id="aiEd"></div>') + '</div>' +
+      '<div id="setupFoot" class="row"></div>';
+    if ($("dlChromium")) $("dlChromium").onclick = startChromium;
+    if ($("reloadSetup")) $("reloadSetup").onclick = function () { load().catch(fail); };
+    onAiSaved = footSetup;
+    if (!ai.error) mountAiEditor($("aiEd"), $("aiTools"));
+    footSetup();
+  }
+  function footSetup() {
+    var f = $("setupFoot"); if (!f) return;
+    var bad = (S.ai.problems || []).length, ready = S.chromium.installed && !S.ai.error && !bad;
+    f.innerHTML = '<span class="grow small mut">' + (!S.chromium.installed ? "Espera a que termine la descarga del navegador." : bad ? "Hay que dejar la IA bien configurada para continuar (o saltar este paso)." : "Todo listo.") + '</span><button class="btn" id="skipAi">Configurar la IA más tarde</button><button class="btn p" id="finish"' + (ready ? "" : " disabled") + '>Empezar</button>';
+    $("finish").onclick = finishSetup; $("skipAi").onclick = finishSetup;
+    $("skipAi").disabled = !S.chromium.installed;
+  }
+  function finishSetup() { api.invoke("home:finishSetup").then(function () { S.setupDone = true; document.body.classList.remove("setup"); onAiSaved = null; render(); ChipAi.toast("¡Listo! Ya puedes añadir tu primer proyecto", "ok"); }, fail); }
   function render() {
     $("ver").textContent = "v" + S.version;
+    if (!S.setupDone) { renderSetup(); if (!S.smoke && !S.chromium.installed && !installingChromium && !chromiumFailed && !autoTried) { autoTried = true; startChromium(); } return; }
+    document.body.classList.remove("setup");
     renderBrowser(); renderProjects(); renderAi(); renderSettings(); show(tab);
     if (!S.smoke && !S.chromium.installed && !installingChromium && !chromiumFailed && !autoTried) { autoTried = true; startChromium(); }
   }

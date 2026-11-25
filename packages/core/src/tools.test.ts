@@ -47,3 +47,14 @@ test("parseCopilotModels lee los nombres de la opción --model de copilot help",
   assert.deepEqual(parseCopilotModels(help), ["claude-sonnet-4.5", "gpt-5", "gpt-5-mini"]);
   assert.deepEqual(parseCopilotModels("sin opciones"), []);
 });
+
+import { aiProblems, type ProviderInfo } from "./aiInfo.js";
+
+test("aiProblems: herramienta que falta y modelo que el CLI ya no lista (solo si la lista viene del CLI)", () => {
+  const cfg = { providers: {}, stages: { discover: { provider: "copilot", model: "viejo" }, flows: { provider: "claude", model: "sonnet" }, mocks: { provider: "codex", model: "x" } }, settings: { maxRepairs: 3 } };
+  const mk = (found: boolean, source: "cli" | "builtin", values: string[]): ProviderInfo => ({ type: "x", command: "x", found: found ? { path: "/x", via: "path" } : null, models: { source, options: values.map((v) => ({ value: v, label: v })) } });
+  const info = { copilot: mk(true, "cli", ["nuevo"]), claude: mk(true, "builtin", ["opus"]), codex: mk(false, "builtin", []) };
+  const p = aiProblems(cfg as never, info);
+  assert.deepEqual(p.map((x) => `${x.stage}:${x.reason}`), ["discover:model-unknown", "mocks:tool-missing"]);
+  assert.deepEqual(aiProblems(cfg as never, info, ["flows"]), []);
+});

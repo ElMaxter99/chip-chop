@@ -184,15 +184,32 @@ export async function runAi(opts: AiRunOptions): Promise<{ ok: boolean; issues: 
 }
 
 /** Small round-trip to confirm a provider answers with the configured model. */
-export async function testProvider(appDir: string, providerName: string, model?: string): Promise<{ ok: boolean; output: string }> {
+export interface TestResult {
+  ok: boolean;
+  output: string;
+  /** qué se ejecutó, para enseñarlo al usuario */
+  command: string;
+  args: string[];
+  prompt: string;
+  model: string;
+  foundAt: string | null;
+  ms: number;
+  exitCode: number | null;
+}
+
+export async function testProvider(appDir: string, providerName: string, model?: string): Promise<TestResult> {
   const cfg = loadAiConfig(appDir);
   const p = cfg.providers[providerName];
   if (!p) throw new Error(`unknown provider "${providerName}"`);
-  const inv = buildInvocation({ ...p, allowedTools: [], allowTools: [], denyTools: ["shell", "write"] }, { provider: providerName, ...(model ? { model } : {}) }, "Reply with exactly: chip-chop-ok");
+  const prompt = "Reply with exactly: chip-chop-ok";
+  const inv = buildInvocation({ ...p, allowedTools: [], allowTools: [], denyTools: ["shell", "write"] }, { provider: providerName, ...(model ? { model } : {}) }, prompt);
+  const found = await resolveCommand(inv.command);
+  const base = { command: inv.command, args: inv.args.map((a) => (a === prompt ? "<prompt>" : a)), prompt, model: model ?? "", foundAt: found?.path ?? null };
+  const t0 = Date.now();
   try {
     const r = await execInvocation(inv, appDir, () => {});
-    return { ok: r.code === 0 && r.stdout.includes("chip-chop-ok"), output: r.stdout.trim().slice(0, 500) };
+    return { ...base, ok: r.code === 0 && r.stdout.includes("chip-chop-ok"), output: r.stdout.trim().slice(0, 800), ms: Date.now() - t0, exitCode: r.code };
   } catch (e) {
-    return { ok: false, output: (e as Error).message };
+    return { ...base, ok: false, output: (e as Error).message, ms: Date.now() - t0, exitCode: null };
   }
 }
