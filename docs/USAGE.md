@@ -40,7 +40,7 @@ Open a new terminal afterwards. Linux and Windows are the validated platforms.
 
 (The plain `chip-chop-<version>.tgz` is also attached: `npm install -g ./chip-chop-<version>.tgz` and `npx playwright install chromium`.)
 
-`doctor` checks Node (22+), git, Chromium and whether the `claude` / `copilot` CLIs are on your `PATH`.
+`doctor` checks Node (22+), git, Chromium and whether the `claude` / `copilot` / `codex` CLIs can be found (on your `PATH`, in the system `PATH` or in the usual install folders such as `~/.local/bin`, npm's global folder or winget's links).
 Only the CLIs you actually configure for a stage are needed.
 
 ## 2. Prepare the app (AngularJS example)
@@ -110,7 +110,7 @@ stages:
   mocks:    { provider: copilot, model: gpt-5-mini }
 ```
 
-Providers: `claude`, `copilot`, or `custom` (any CLI, with `{prompt}` / `{model}` placeholders).
+Providers: `claude` (Claude Code), `copilot` (GitHub Copilot CLI), `codex` (OpenAI Codex CLI, runs `codex exec --sandbox workspace-write`; log in once with `codex login`), or `custom` (any CLI, with `{prompt}` / `{model}` placeholders).
 Prompts can be replaced with `settings.promptsDir` (`discover.md`, `flows.md`, `mocks.md`, `repair.md`).
 
 ## What has been tested

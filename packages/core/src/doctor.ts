@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { loadAiConfig } from "./ai.js";
+import { resolveCommand, versionOf } from "./tools.js";
 
 export interface Check {
   name: string;
@@ -39,8 +40,10 @@ export async function doctor(appDir: string): Promise<Check[]> {
     const cmd = p.command ?? p.type;
     if (seen.has(cmd)) continue;
     seen.add(cmd);
-    const v = await version(cmd);
-    checks.push({ name: `ai: ${name} (${cmd})`, ok: !!v, detail: v ?? "not found on PATH (only needed if a stage uses it)", required: false });
+    const found = await resolveCommand(cmd);
+    const v = found ? await versionOf(found.path) : undefined;
+    const where = found ? ` (${found.path}${found.via === "path" ? "" : found.via === "system" ? " · system PATH" : found.via === "shell" ? " · login shell" : ""})` : "";
+    checks.push({ name: `ai: ${name} (${cmd})`, ok: !!v, detail: v ? `${v}${where}` : found ? `found at ${found.path} but it did not answer --version` : "not found on PATH (only needed if a stage uses it)", required: false });
   }
   return checks;
 }

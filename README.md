@@ -43,13 +43,15 @@ Descarga el instalable de tu sistema en la [última release](https://github.com/
 
 Necesitas **git** y **Node 22 o superior** en el PATH para la línea de comandos. La app de escritorio ya trae lo que necesita y descarga Chromium la primera vez (se muestra el progreso en la pantalla de Inicio).
 
-Para que la IA prepare el catálogo necesitas **una** de estas herramientas con sesión iniciada:
+Para que la IA prepare el catálogo necesitas **una** de estas herramientas con sesión iniciada (Claude Code, GitHub Copilot CLI u OpenAI Codex):
 
 ```bash
 # Claude Code
 curl -fsSL https://claude.ai/install.sh | bash          # Windows: irm https://claude.ai/install.ps1 | iex
 # GitHub Copilot CLI
 npm install -g @github/copilot                          # Windows: winget install GitHub.Copilot
+# OpenAI Codex (ChatGPT)
+npm install -g @openai/codex && codex login
 ```
 
 Comprueba que todo está bien con `chip-chop doctor` (o en **Ajustes** de la app).
@@ -90,7 +92,7 @@ Abre `.chipchop/config.yaml` y revisa **cómo se compila y se sirve tu app** (co
 
 ### 2. Deja que la IA prepare el catálogo
 
-Pestaña **IA**: elige el proveedor y el modelo de cada etapa (descubrir estados, flujos, mocks, reparar). Puedes mezclar, p. ej. un modelo potente para descubrir y uno barato para los flujos.
+Pestaña **IA**: elige la herramienta (Claude Code, Copilot u OpenAI Codex; se ve cuál está instalada y dónde) y el modelo de cada etapa (descubrir estados, flujos, mocks, reparar). El modelo sale de una lista —la de Copilot se lee de `copilot help`; la de Claude va incluida— y siempre puedes escribir otro con «Otro…». Puedes mezclar, p. ej. un modelo potente para descubrir y uno barato para los flujos. chip-chop busca las herramientas en el PATH, en el PATH del sistema y en las carpetas habituales de instalación; si aun así no la encuentra, indica la ruta completa en `command:` de `ai.yaml`.
 
 ![IA en la app local](docs/screenshots/ui-ia.png)
 
@@ -237,7 +239,7 @@ Cámbialo en **Ajustes** o con `chip-chop update channel latest`. Los borradores
 
 Probado en CI (Linux y Windows): motor, CLI, interfaz, demos de AngularJS y estática, actualizador contra releases simuladas y arranque del paquete de escritorio.
 
-**Sin probar** (no lo des por hecho): macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
+**Sin probar** (no lo des por hecho): el proveedor de OpenAI Codex y la lectura de modelos de `copilot help` (solo con tests unitarios); macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
 
 ## Desarrollo y releases
 

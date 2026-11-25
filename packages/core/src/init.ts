@@ -89,6 +89,9 @@ providers:
   copilot:
     type: copilot
     command: copilot
+  codex:
+    type: codex
+    command: codex
 
 stages:
   discover: { provider: claude, model: sonnet }   # routes and overlays -> states.yaml

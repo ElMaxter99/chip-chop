@@ -8,6 +8,7 @@ import { failureReasons, reportDir } from "./compare.js";
 import { currentVersion } from "./updater.js";
 import type { Report } from "./types.js";
 import { doctor } from "./doctor.js";
+import { aiInfo } from "./aiInfo.js";
 import { exists, writeText } from "./fsutil.js";
 import { initProject } from "./init.js";
 import { runCapture, runCompare } from "./pipeline.js";
@@ -62,7 +63,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
     for (const l of job.listeners) l.write(`data: ${JSON.stringify(line)}\n\n`);
   };
   const start = (title: string, fn: (log: (l: string) => void) => Promise<unknown>): Job => {
-    if (current?.status === "running") throw new Error("another job is still running");
+    if (current?.status === "running") throw new Error(`another job is still running (${current.title})`);
     const job: Job = { id: randomBytes(4).toString("hex"), title, status: "running", lines: [], listeners: new Set() };
     jobs.set(job.id, job);
     current = job;
@@ -96,7 +97,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
       const cookieOk = (req.headers.cookie ?? "").split(/;\s*/).includes(`cc=${token}`);
       const authed = u.searchParams.get("token") === token || req.headers["x-chipchop-token"] === token || cookieOk;
 
-      if (req.method === "GET" && (u.pathname === "/" || /^\/(app\.js|style\.css|favicon\.svg|index\.html|fonts\/[\w.-]+)$/.test(u.pathname))) {
+      if (req.method === "GET" && (u.pathname === "/" || /^\/(app\.js|ai-editor\.js|icons\/[\w.-]+|style\.css|favicon\.svg|index\.html|fonts\/[\w.-]+)$/.test(u.pathname))) {
         const rel = u.pathname === "/" ? "index.html" : u.pathname.slice(1);
         const f = resolve(uiDir, rel);
         if (!f.startsWith(uiDir + sep) || !exists(f)) return void send(res, 404, { error: "not found" });
@@ -167,6 +168,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
         return void send(res, 200, { job: job.id });
       }
       if (u.pathname === "/api/doctor" && req.method === "GET") return void send(res, 200, await doctor(appDir));
+      if (u.pathname === "/api/ai/info" && req.method === "GET") return void send(res, 200, await aiInfo(loadAiConfig(appDir), u.searchParams.get("refresh") === "1"));
       if (u.pathname === "/api/ai" && req.method === "GET") return void send(res, 200, loadAiConfig(appDir));
       if (u.pathname === "/api/ai" && req.method === "PUT") {
         const b = await body(req);

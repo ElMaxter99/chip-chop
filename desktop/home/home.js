@@ -7,17 +7,75 @@
   var STAGES = [["discover", "Descubrir", "Rutas y modales → estados"], ["flows", "Flujos", "Recorridos del usuario"], ["mocks", "Mocks", "Respuestas del backend con tipos"], ["repair", "Reparar", "Corrige errores de validación"]];
   var TR = [["needs >= 22", "hace falta 22 o superior"], ["not found on PATH (only needed if a stage uses it)", "no encontrado (solo hace falta si una etapa lo usa)"], ["not found on PATH", "no encontrado"], ["not installed. Run: npx playwright install chromium", "no instalado"]];
   var tr = function (s) { TR.forEach(function (p) { s = s.replace(p[0], p[1]); }); return s; };
-  var S = null, tab = "proyectos", chromiumLog = "", updLog = "", updInfo = null, installingChromium = false, chromiumFailed = false, autoTried = false, msgs = {};
+  var updPg = null, S = null, tab = "proyectos", chromiumLog = "", updLog = "", updInfo = null, installingChromium = false, chromiumFailed = false, autoTried = false, msgs = {};
 
-  function fail(e) { alert(String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")); }
+  // ---------- diálogos y progreso (comunes) ----------
+  function dialog(o) {
+    return new Promise(function (resolve) {
+      var prev = document.activeElement, back = document.createElement("div"), kind = o.kind || "wa";
+      var btns = o.buttons || [{ label: "Entendido", primary: true, value: true }];
+      back.className = "modal-back";
+      back.innerHTML = '<div class="modal ' + kind + '" role="alertdialog" aria-modal="true" aria-labelledby="mt" aria-describedby="mb"><div class="modal-h"><span class="modal-i" aria-hidden="true">' + (kind === "ok" ? "✓" : "!") + '</span><h2 id="mt">' + esc(o.title || "") + '</h2></div><div class="modal-b" id="mb">' + esc(o.message || "") + (o.detail ? '<div class="modal-d">' + esc(o.detail) + "</div>" : "") + '</div><div class="modal-f">' + btns.map(function (b, i) { return '<button class="btn' + (b.primary ? " p" : "") + '" data-i="' + i + '">' + esc(b.label) + "</button>"; }).join("") + "</div></div>";
+      document.body.appendChild(back);
+      var all = back.querySelectorAll("button"), first = back.querySelector(".p") || all[0];
+      function close(v) { document.removeEventListener("keydown", key, true); back.remove(); if (prev && prev.focus) prev.focus(); resolve(v); }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(btns[btns.length > 1 ? 0 : 0].value); }
+        else if (e.key === "Tab") { var f = all[0], l = all[all.length - 1]; if (e.shiftKey && document.activeElement === f) { e.preventDefault(); l.focus(); } else if (!e.shiftKey && document.activeElement === l) { e.preventDefault(); f.focus(); } }
+      }
+      document.addEventListener("keydown", key, true);
+      all.forEach(function (b) { b.onclick = function () { close(btns[+b.dataset.i].value); }; });
+      first.focus();
+    });
+  }
+  // Traduce los errores técnicos más típicos a algo que se entienda.
+  function friendly(m) {
+    m = String(m || "").replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+    if (/another job is still running|otra tarea/i.test(m)) return "Ya hay otra tarea en marcha (captura, comparación, IA o actualización). Espera a que termine y vuelve a intentarlo.";
+    if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i.test(m)) return "No hay conexión con GitHub. Comprueba tu red o el proxy y vuelve a intentarlo.";
+    return m;
+  }
+  function notify(e, title) { return dialog({ kind: "er", title: title || "No se ha podido completar", message: friendly(e && e.message ? e.message : e) }); }
+  // Panel de progreso de la actualización: fases, barra, tiempo y detalle plegado. push(línea) la hace avanzar.
+  var PHASES = ["Buscar", "Descargar", "Instalar", "Reiniciar"];
+  function progress(host, modeManual) {
+    var t0 = Date.now(), phase = 0, pct = null, ended = false, log = "";
+    host.innerHTML = '<div class="prog" role="status" aria-live="polite"><div class="prog-head"><b data-r="t">Preparando…</b><span class="mut small" data-r="s">0 s</span></div><div class="bar ind" data-r="b"><i data-r="i"></i></div><ol class="phases">' + PHASES.map(function (p) { return "<li>" + p + "</li>"; }).join("") + '</ol><details><summary>Ver detalles</summary><pre class="log" data-r="l"></pre></details></div>';
+    var q = function (k) { return host.querySelector('[data-r="' + k + '"]'); };
+    var timer = setInterval(function () { q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 500);
+    function paint(title) {
+      q("t").textContent = title;
+      host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = i < phase ? "done" : i === phase ? "on" : ""; });
+      q("b").className = "bar" + (pct == null ? " ind" : ""); q("i").style.width = pct == null ? "" : pct + "%";
+    }
+    paint("Buscando la versión…"); phase = 0; paint("Buscando la versión…");
+    return {
+      push: function (line) {
+        if (ended) return; log += line + "\n"; q("l").textContent = log;
+        var m;
+        if ((m = /progreso:\s*(\d+)%/.exec(line))) { phase = 1; pct = +m[1]; paint("Descargando… " + pct + "%"); }
+        else if (/^(downloading|descargando)/i.test(line)) { phase = 1; pct = null; paint("Descargando la nueva versión…"); }
+        else if (/^installing/i.test(line)) { phase = 2; pct = null; paint("Instalando sobre la versión actual…"); }
+        else if (/descargada/i.test(line)) { phase = 3; pct = null; paint("Reiniciando para terminar…"); }
+      },
+      end: function (ok, msg) {
+        ended = true; clearInterval(timer); phase = ok ? PHASES.length : phase; pct = ok ? 100 : 0;
+        host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = ok ? "done" : i < phase ? "done" : ""; });
+        q("b").className = "bar"; q("i").style.width = (ok ? 100 : 0) + "%"; q("t").textContent = msg; host.firstChild.classList.toggle("er", !ok);
+        q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s";
+      }
+    };
+  }
+  function fail(e) { return notify(e); }
   function ago(ts) { if (!ts) return "nunca"; var m = Math.round((Date.now() - ts) / 60000); if (m < 1) return "ahora mismo"; if (m < 60) return "hace " + m + " min"; var h = Math.round(m / 60); if (h < 24) return "hace " + h + " h"; return "hace " + Math.round(h / 24) + " d"; }
 
   api.onLog(function (line) {
     if (line.indexOf("chromium:") === 0) { chromiumLog = line.slice(9); var el = $("chromiumLog"); if (el) el.textContent = chromiumLog; }
-    else { updLog += line + "\n"; var u = $("updLog"); if (u) { u.hidden = false; u.textContent = updLog; u.scrollTop = u.scrollHeight; } }
+    else if (updPg) updPg.push(line);
   });
 
-  function load() { return api.invoke("home:state").then(function (s) { S = s; if (!document.getElementById("css")) { var l = document.createElement("link"); l.id = "css"; l.rel = "stylesheet"; l.href = s.cssHref; l.onload = function () { document.body.style.visibility = "visible"; }; document.head.appendChild(l); } render(); }); }
+  function loadEditor(href) { return window.ChipAi || !href ? Promise.resolve() : new Promise(function (ok) { var s = document.createElement("script"); s.src = href; s.onload = s.onerror = function () { ok(); }; document.head.appendChild(s); }); }
+  function load() { return api.invoke("home:state").then(function (s) { return loadEditor(s.aiEditorHref).then(function () { return s; }); }).then(function (s) { S = s; if (!document.getElementById("css")) { var l = document.createElement("link"); l.id = "css"; l.rel = "stylesheet"; l.href = s.cssHref; l.onload = function () { document.body.style.visibility = "visible"; }; document.head.appendChild(l); } render(); }); }
 
   var TABS = ["proyectos", "ia", "ajustes"];
   function show(t, focus) {
@@ -51,9 +109,9 @@
       var missing = Object.keys(used).filter(function (n) { return !okName[n]; });
       var anyOk = Object.keys(okName).length > 0;
       if (tools.length && missing.length) {
-        out.push('<div class="banner ' + (anyOk ? "wa" : "er") + '" role="status"><div class="grow"><b>' + (anyOk ? "Alguna etapa usa una herramienta de IA que no está instalada" : "Falta Claude Code o GitHub Copilot") + '</b><div class="small">' + (anyOk
+        out.push('<div class="banner ' + (anyOk ? "wa" : "er") + '" role="status"><div class="grow"><b>' + (anyOk ? "Alguna etapa usa una herramienta de IA que no está instalada" : "Falta Claude Code, GitHub Copilot u OpenAI Codex") + '</b><div class="small">' + (anyOk
           ? "Las etapas por defecto usan <code>" + esc(missing.join(", ")) + "</code>. Cambia el proveedor en la pestaña <a href=\"#\" data-tab=\"ia\">IA</a> o instala la que falta."
-          : "La etapa por defecto usa <code>" + esc(missing.join(", ")) + "</code> y no se encuentra en tu PATH. Instala Claude Code (<code>" + (S.os === "win32" ? "irm https://claude.ai/install.ps1 | iex" : "curl -fsSL https://claude.ai/install.sh | bash") + "</code>) o GitHub Copilot CLI (<code>" + (S.os === "win32" ? "winget install GitHub.Copilot" : "npm install -g @github/copilot") + "</code>), inicia sesión una vez en una terminal y reabre Chip Chop. Sin IA puedes seguir capturando y comparando, pero no generar el catálogo.") + "</div></div></div>");
+          : "La etapa por defecto usa <code>" + esc(missing.join(", ")) + "</code> y no se encuentra en tu PATH. Instala Claude Code (<code>" + (S.os === "win32" ? "irm https://claude.ai/install.ps1 | iex" : "curl -fsSL https://claude.ai/install.sh | bash") + "</code>) o GitHub Copilot CLI (<code>" + (S.os === "win32" ? "winget install GitHub.Copilot" : "npm install -g @github/copilot") + "</code>) u OpenAI Codex (<code>npm install -g @openai/codex</code>), inicia sesión una vez en una terminal (<code>claude</code>, <code>copilot</code> o <code>codex login</code>) y reabre Chip Chop. Sin IA puedes seguir capturando y comparando, pero no generar el catálogo.") + "</div></div></div>");
       }
     }
     return out.join("");
@@ -118,25 +176,21 @@
 
   // ---------- IA ----------
   function renderAi() {
-    var provs = Object.keys(S.ai.providers);
     var ok = S.checks.filter(function (c) { return c.name.indexOf("ai:") === 0; });
-    var rows = STAGES.map(function (s) {
-      var cur = S.ai.stages[s[0]] || { provider: provs[0], model: "" };
-      return "<tr><td><b>" + s[1] + '</b><div class="small mut">' + s[2] + '</div></td><td><select data-st="' + s[0] + '" data-k="provider" aria-label="Proveedor de ' + s[1] + '">' + provs.map(function (p) { return '<option value="' + esc(p) + '"' + (p === cur.provider ? " selected" : "") + ">" + esc(p) + "</option>"; }).join("") + '</select></td><td><input type="text" data-st="' + s[0] + '" data-k="model" value="' + esc(cur.model || "") + '" placeholder="modelo (opcional)" aria-label="Modelo de ' + s[1] + '"></td></tr>';
-    }).join("");
     if (S.ai.error) {
       $("ia").innerHTML = '<div><h1>Inteligencia artificial</h1></div><div class="banner er" role="alert" data-ai-error><div class="grow"><b>No se puede leer la configuración de IA</b><div class="small">El archivo <code>' + esc(S.ai.globalPath) + '</code> tiene un error y Chip Chop no puede mostrarlo ni guardarlo:</div><pre class="log" style="margin-top:8px">' + esc(S.ai.error) + '</pre><div class="small" style="margin-top:8px">Corrígelo con un editor de texto (es YAML: cuida las sangrías y los dos puntos) o bórralo para volver a los valores por defecto, y pulsa Recargar.</div></div><button class="btn p" id="reloadAi">Recargar</button></div>';
       $("reloadAi").onclick = function () { load().catch(fail); };
       return;
     }
+    var info = S.ai.info || {};
     $("ia").innerHTML = warnings() + '<div><h1>Inteligencia artificial</h1><p class="sub">Chip Chop no trae IA propia: usa la herramienta de línea de comandos que ya tengas (Claude Code o GitHub Copilot) para leer el código de tu app y escribir su catálogo de estados. Estos valores son los de partida para todos los proyectos; cada proyecto puede cambiarlos en su pestaña IA.</p></div>' +
-      '<div class="card"><h2>Herramientas detectadas</h2>' + (ok.map(function (c) { return '<div class="kv"><span>' + esc(c.name.replace("ai: ", "")) + "</span><span>" + badge(c.ok ? "instalada" : "no instalada", c.ok ? "ok" : "wa") + ' <span class="small mut">' + esc(tr(c.detail)) + "</span></span></div>"; }).join("") || '<span class="mut">Ninguna.</span>') + "</div>" +
-      '<div class="card"><h2>Qué modelo usa cada etapa</h2><table><tr><th scope="col">Etapa</th><th scope="col">Proveedor</th><th scope="col">Modelo</th></tr>' + rows + '</table><div class="row" style="margin-top:12px"><button class="btn p" id="saveAi">Guardar</button><span id="aiMsg" class="small mut" role="status"></span></div>' +
+      '<div class="card"><div class="row"><h2 class="grow" style="margin:0">Herramientas detectadas</h2><button class="btn" id="rescan">Volver a buscar</button></div>' + (Object.keys(info).map(function (n) { var i = info[n]; return '<div class="kv"><span>' + esc(n) + ' <span class="small mut">(' + esc(i.command) + ")</span></span><span>" + badge(i.found ? "instalada" : "no encontrada", i.found ? "ok" : "wa") + ' <span class="small mut">' + esc(i.found ? (i.version || "") + " · " + i.found.path : "no está en el PATH ni en las carpetas habituales de instalación") + "</span></span></div>"; }).join("") || ok.map(function (c) { return '<div class="kv"><span>' + esc(c.name.replace("ai: ", "")) + "</span><span>" + badge(c.ok ? "instalada" : "no instalada", c.ok ? "ok" : "wa") + ' <span class="small mut">' + esc(tr(c.detail)) + "</span></span></div>"; }).join("") || '<span class="mut">Ninguna.</span>') + "</div>" +
+      '<div class="card"><h2>Qué herramienta y modelo usa cada etapa</h2>' + ChipAi.rows({ stages: STAGES, cfg: { providers: S.ai.providers, stages: S.ai.stages }, info: info }) + '<div class="row" style="margin-top:12px"><button class="btn p" id="saveAi">Guardar</button><span id="aiMsg" class="small mut" role="status"></span></div>' +
       '<p class="small mut" style="margin-bottom:0">Se guarda en <code>' + esc(S.ai.globalPath) + "</code>. Sobre el consumo: Chip Chop no lo mide; lo contabiliza tu proveedor (Claude o Copilot) en su propia cuenta.</p></div>";
+    ChipAi.bind($("ia"), { info: info });
+    $("rescan").onclick = function () { var b = $("rescan"); b.disabled = true; b.textContent = "Buscando…"; api.invoke("home:state", { refreshAi: true }).then(function (s) { S = s; render(); }, fail); };
     $("saveAi").onclick = function () {
-      var stages = {};
-      document.querySelectorAll("#ia [data-st]").forEach(function (el) { var k = el.dataset.st; stages[k] = stages[k] || {}; stages[k][el.dataset.k] = el.value.trim(); });
-      api.invoke("home:saveAi", stages).then(function () { $("aiMsg").textContent = "Guardado."; }, fail);
+      api.invoke("home:saveAi", ChipAi.collect($("ia"))).then(function () { $("aiMsg").textContent = "Guardado."; }, fail);
     };
   }
 
@@ -148,12 +202,21 @@
       '<div class="card"><h2>Actualizaciones</h2><div class="kv"><span>Versión instalada</span><b>' + esc(S.version) + "</b></div>" +
       '<div role="radiogroup" aria-label="Canal de actualizaciones"><label class="radio"><input type="radio" name="canal" value="stable"' + (S.channel === "stable" ? " checked" : "") + '><span><b>Solo estables</b><br><span class="mut small">Solo versiones finales. Ignora las candidatas (rc).</span></span></label>' +
       '<label class="radio"><input type="radio" name="canal" value="latest"' + (S.channel === "latest" ? " checked" : "") + '><span><b>Últimas</b><br><span class="mut small">Siempre la más reciente, sea candidata (rc) o final.</span></span></label></div>' +
-      '<div class="row" style="margin:12px 0"><button class="btn" id="chk">Buscar actualizaciones</button></div>' + upd + '<pre class="log" id="updLog" hidden></pre></div>' +
+      '<div class="row" style="margin:12px 0"><button class="btn" id="chk">Buscar actualizaciones</button></div>' + upd + '<div id="updProg"></div></div>' +
       '<div class="card"><h2>Estado del sistema</h2>' + S.checks.filter(function (c) { return c.name.indexOf("ai:") !== 0; }).map(function (c) { return '<div class="kv"><span>' + esc(c.name) + "</span><span>" + badge(c.ok ? "ok" : "falta", c.ok ? "ok" : "er") + ' <span class="small mut">' + esc(tr(c.detail)) + "</span></span></div>"; }).join("") + '<div class="kv"><span>Sistema</span><span class="mut">' + esc(S.platform) + "</span></div></div>" +
       '<div class="card"><h2>Acerca de</h2><p style="margin:0">Chip Chop captura cada estado de la interfaz de una app web en dos versiones de git y compara píxeles, árbol ARIA, peticiones, errores de consola y el grafo de flujos. <a href="#" id="docs">Documentación y versiones</a></p></div>';
     document.querySelectorAll("input[name=canal]").forEach(function (r) { r.onchange = function () { api.invoke("home:setChannel", r.value).then(function () { S.channel = r.value; updInfo = null; }); }; });
     $("chk").onclick = function () { var b = $("chk"); b.disabled = true; b.textContent = "Buscando…"; api.invoke("home:checkUpdate").then(function (i) { updInfo = i; renderSettings(); }, function (e) { updInfo = { error: e.message }; renderSettings(); }); };
-    if ($("doUpd")) $("doUpd").onclick = function () { var b = $("doUpd"); b.disabled = true; updLog = ""; api.invoke("home:installUpdate").catch(fail).then(function () { b.disabled = false; }); };
+    if (updPg && $("updProg")) $("updProg").replaceWith(updPg.host);
+    if ($("doUpd")) $("doUpd").onclick = function () {
+      var b = $("doUpd"), manual = S.updateMode !== "auto", c = $("chk");
+      b.disabled = true; c.disabled = true; b.textContent = manual ? "Abriendo…" : "Actualizando…";
+      updPg = progress($("updProg"), manual); updPg.host = $("updProg");
+      api.invoke("home:installUpdate").then(function () {
+        if (manual) { updPg.end(true, "Se ha abierto la página de descargas"); b.disabled = false; c.disabled = false; b.textContent = "Abrir descargas"; }
+        else updPg.end(true, "Descargada: la app se reinicia para terminar");
+      }, function (e) { updPg.end(false, "La actualización ha fallado"); b.disabled = false; c.disabled = false; b.textContent = "Actualizar ahora"; return notify(e, "No se ha podido actualizar"); });
+    };
     $("docs").onclick = function (e) { e.preventDefault(); api.invoke("home:openExternal", "https://github.com/ElMaxter99/chip-chop"); };
   }
 

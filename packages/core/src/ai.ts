@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { needsShell, quoteForCmd, resolveCommand } from "./tools.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { exists, readStructured } from "./fsutil.js";
@@ -13,6 +14,7 @@ export const DEFAULT_AI: Required<Pick<AiSettings, "providers" | "stages">> & { 
   providers: {
     claude: { type: "claude", command: "claude", timeoutMs: 900000 },
     copilot: { type: "copilot", command: "copilot", timeoutMs: 900000 },
+    codex: { type: "codex", command: "codex", timeoutMs: 900000 },
   },
   stages: {
     discover: { provider: "claude", model: "sonnet" },
@@ -70,6 +72,11 @@ export function buildInvocation(p: ProviderConfig, stage: StageConfig, prompt: s
     const args = ["-p", prompt, ...(model ? ["--model", model] : []), ...(p.allowTools ?? ["write"]).map((t) => `--allow-tool=${t}`), ...(p.denyTools ?? ["shell"]).map((t) => `--deny-tool=${t}`), "-s", ...extra];
     return { command: p.command ?? "copilot", args, env, timeoutMs };
   }
+  if (p.type === "codex") {
+    // `codex exec` es el modo no interactivo; el prompt entra por stdin ("-"). Necesita poder escribir .chipchop/, pero nada más.
+    const args = ["exec", "--sandbox", p.sandbox ?? "workspace-write", "--skip-git-repo-check", "--color", "never", ...(model ? ["--model", model] : []), ...extra, "-"];
+    return { command: p.command ?? "codex", args, stdin: prompt, env, timeoutMs };
+  }
   if (!p.command) throw new Error("custom provider needs a `command`");
   const sub = (s: string): string => s.replaceAll("{prompt}", prompt).replaceAll("{model}", model ?? "");
   const viaStdin = p.promptVia === "stdin";
@@ -77,9 +84,15 @@ export function buildInvocation(p: ProviderConfig, stage: StageConfig, prompt: s
   return { command: p.command, args, ...(viaStdin ? { stdin: prompt } : {}), env, timeoutMs };
 }
 
-export function execInvocation(inv: Invocation, cwd: string, log: (l: string) => void): Promise<{ code: number; stdout: string }> {
+export async function execInvocation(inv: Invocation, cwd: string, log: (l: string) => void): Promise<{ code: number; stdout: string }> {
+  // Localiza el ejecutable aunque no esté en el PATH de esta app (instalador nativo de Claude Code, npm, winget…).
+  const found = await resolveCommand(inv.command);
+  const exe = found?.path ?? inv.command;
+  const shell = needsShell(exe);
   return new Promise((resolve, reject) => {
-    const child = spawn(inv.command, inv.args, { cwd, env: { ...process.env, ...inv.env }, stdio: ["pipe", "pipe", "pipe"] });
+    const child = shell
+      ? spawn(quoteForCmd(exe), inv.args.map(quoteForCmd), { cwd, env: { ...process.env, ...inv.env }, stdio: ["pipe", "pipe", "pipe"], shell: true, windowsHide: true })
+      : spawn(exe, inv.args, { cwd, env: { ...process.env, ...inv.env }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     let out = "";
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
@@ -93,7 +106,7 @@ export function execInvocation(inv: Invocation, cwd: string, log: (l: string) =>
     child.stderr.on("data", (d: Buffer) => log(`  ai! ${d.toString().trimEnd()}`));
     child.on("error", (e) => {
       clearTimeout(timer);
-      reject(new Error(`could not start "${inv.command}": ${e.message}. Is it installed and on PATH?`));
+      reject(new Error(`could not start "${inv.command}": ${e.message}. Is it installed? chip-chop also looks in the usual install folders; you can set the full path in "command:" of ai.yaml.`));
     });
     child.on("close", (code) => {
       clearTimeout(timer);

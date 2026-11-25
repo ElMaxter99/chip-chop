@@ -71,3 +71,11 @@ if (prompt.startsWith("chip-chop validate")) {
   assert.ok(lines.some((l) => l.includes("repair attempt")), lines.join("\n"));
   assert.equal(r.ok, true, r.issues);
 });
+
+test("codex: exec por stdin, sandbox que permite escribir .chipchop y modelo opcional", () => {
+  const inv = buildInvocation({ type: "codex" }, { provider: "codex", model: "gpt-x" }, "hola");
+  assert.equal(inv.command, "codex");
+  assert.deepEqual(inv.args, ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--color", "never", "--model", "gpt-x", "-"]);
+  assert.equal(inv.stdin, "hola");
+  assert.ok(!buildInvocation({ type: "codex", sandbox: "read-only" }, { provider: "codex" }, "x").args.includes("--model"));
+});

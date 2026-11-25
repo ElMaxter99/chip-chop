@@ -48,10 +48,10 @@
       "additionalProperties": false,
       "properties": {
         "type": {
-          "enum": ["claude", "copilot", "custom"],
-          "description": "claude: Claude Code CLI. copilot: GitHub Copilot CLI. custom: any CLI, described with args."
+          "enum": ["claude", "copilot", "codex", "custom"],
+          "description": "claude: Claude Code CLI. copilot: GitHub Copilot CLI. codex: OpenAI Codex CLI (ChatGPT). custom: any CLI, described with args."
         },
-        "command": { "type": "string", "description": "Executable name or absolute path. Defaults to claude / copilot." },
+        "command": { "type": "string", "description": "Executable name or absolute path. Defaults to claude / copilot / codex." },
         "extraArgs": { "type": "array", "items": { "type": "string" }, "description": "Appended to the built-in arguments." },
         "env": { "type": "object", "additionalProperties": { "type": "string" } },
         "timeoutMs": { "type": "integer", "minimum": 10000, "default": 900000 },
@@ -73,6 +73,10 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "copilot only. Passed to --deny-tool. Default: shell."
+        },
+        "sandbox": {
+          "enum": ["read-only", "workspace-write", "danger-full-access"],
+          "description": "codex only. Passed to --sandbox. Default: workspace-write (it must write .chipchop/)."
         },
         "args": {
           "type": "array",

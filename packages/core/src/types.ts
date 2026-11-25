@@ -173,13 +173,15 @@ export interface Report {
 export type StageName = "discover" | "flows" | "mocks" | "repair";
 
 export interface ProviderConfig {
-  type: "claude" | "copilot" | "custom";
+  type: "claude" | "copilot" | "codex" | "custom";
   command?: string;
   extraArgs?: string[];
   env?: Record<string, string>;
   timeoutMs?: number;
   allowedTools?: string[];
   permissionMode?: string;
+  /** codex only: read-only | workspace-write | danger-full-access. Default: workspace-write. */
+  sandbox?: string;
   allowTools?: string[];
   denyTools?: string[];
   args?: string[];

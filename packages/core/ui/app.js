@@ -15,20 +15,78 @@
     }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
   // Runs a background job and streams its log into <pre id=logId>.
-  function job(path, body, logId) {
-    var pre = $(logId); pre.hidden = false; pre.textContent = "";
+  function job(path, body, logId, onLine) {
+    var pre = logId ? $(logId) : null; if (pre) { pre.hidden = false; pre.textContent = ""; }
     return api(path, "POST", body).then(function (r) {
       return new Promise(function (resolve) {
         var es = new EventSource("/api/jobs/" + r.job + "/events?token=" + token);
-        es.onmessage = function (e) { pre.textContent += JSON.parse(e.data) + "\n"; pre.scrollTop = pre.scrollHeight; };
+        es.onmessage = function (e) { var line = JSON.parse(e.data); if (pre) { pre.textContent += line + "\n"; pre.scrollTop = pre.scrollHeight; } if (onLine) onLine(line); };
         es.addEventListener("end", function (e) { es.close(); api("/api/jobs/" + r.job).then(function (j) { resolve({ status: JSON.parse(e.data), result: j.result }); }); });
       });
     });
   }
+
+  // ---------- diálogos y progreso (comunes) ----------
+  function dialog(o) {
+    return new Promise(function (resolve) {
+      var prev = document.activeElement, back = document.createElement("div"), kind = o.kind || "wa";
+      var btns = o.buttons || [{ label: "Entendido", primary: true, value: true }];
+      back.className = "modal-back";
+      back.innerHTML = '<div class="modal ' + kind + '" role="alertdialog" aria-modal="true" aria-labelledby="mt" aria-describedby="mb"><div class="modal-h"><span class="modal-i" aria-hidden="true">' + (kind === "ok" ? "✓" : "!") + '</span><h2 id="mt">' + esc(o.title || "") + '</h2></div><div class="modal-b" id="mb">' + esc(o.message || "") + (o.detail ? '<div class="modal-d">' + esc(o.detail) + "</div>" : "") + '</div><div class="modal-f">' + btns.map(function (b, i) { return '<button class="btn' + (b.primary ? " p" : "") + '" data-i="' + i + '">' + esc(b.label) + "</button>"; }).join("") + "</div></div>";
+      document.body.appendChild(back);
+      var all = back.querySelectorAll("button"), first = back.querySelector(".p") || all[0];
+      function close(v) { document.removeEventListener("keydown", key, true); back.remove(); if (prev && prev.focus) prev.focus(); resolve(v); }
+      function key(e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(btns[btns.length > 1 ? 0 : 0].value); }
+        else if (e.key === "Tab") { var f = all[0], l = all[all.length - 1]; if (e.shiftKey && document.activeElement === f) { e.preventDefault(); l.focus(); } else if (!e.shiftKey && document.activeElement === l) { e.preventDefault(); f.focus(); } }
+      }
+      document.addEventListener("keydown", key, true);
+      all.forEach(function (b) { b.onclick = function () { close(btns[+b.dataset.i].value); }; });
+      first.focus();
+    });
+  }
+  // Traduce los errores técnicos más típicos a algo que se entienda.
+  function friendly(m) {
+    m = String(m || "").replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+    if (/another job is still running|otra tarea/i.test(m)) return "Ya hay otra tarea en marcha (captura, comparación, IA o actualización). Espera a que termine y vuelve a intentarlo.";
+    if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network/i.test(m)) return "No hay conexión con GitHub. Comprueba tu red o el proxy y vuelve a intentarlo.";
+    return m;
+  }
+  function notify(e, title) { return dialog({ kind: "er", title: title || "No se ha podido completar", message: friendly(e && e.message ? e.message : e) }); }
+  // Panel de progreso de la actualización: fases, barra, tiempo y detalle plegado. push(línea) la hace avanzar.
+  var PHASES = ["Buscar", "Descargar", "Instalar", "Reiniciar"];
+  function progress(host, modeManual) {
+    var t0 = Date.now(), phase = 0, pct = null, ended = false, log = "";
+    host.innerHTML = '<div class="prog" role="status" aria-live="polite"><div class="prog-head"><b data-r="t">Preparando…</b><span class="mut small" data-r="s">0 s</span></div><div class="bar ind" data-r="b"><i data-r="i"></i></div><ol class="phases">' + PHASES.map(function (p) { return "<li>" + p + "</li>"; }).join("") + '</ol><details><summary>Ver detalles</summary><pre class="log" data-r="l"></pre></details></div>';
+    var q = function (k) { return host.querySelector('[data-r="' + k + '"]'); };
+    var timer = setInterval(function () { q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 500);
+    function paint(title) {
+      q("t").textContent = title;
+      host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = i < phase ? "done" : i === phase ? "on" : ""; });
+      q("b").className = "bar" + (pct == null ? " ind" : ""); q("i").style.width = pct == null ? "" : pct + "%";
+    }
+    paint("Buscando la versión…"); phase = 0; paint("Buscando la versión…");
+    return {
+      push: function (line) {
+        if (ended) return; log += line + "\n"; q("l").textContent = log;
+        var m;
+        if ((m = /progreso:\s*(\d+)%/.exec(line))) { phase = 1; pct = +m[1]; paint("Descargando… " + pct + "%"); }
+        else if (/^(downloading|descargando)/i.test(line)) { phase = 1; pct = null; paint("Descargando la nueva versión…"); }
+        else if (/^installing/i.test(line)) { phase = 2; pct = null; paint("Instalando sobre la versión actual…"); }
+        else if (/descargada/i.test(line)) { phase = 3; pct = null; paint("Reiniciando para terminar…"); }
+      },
+      end: function (ok, msg) {
+        ended = true; clearInterval(timer); phase = ok ? PHASES.length : phase; pct = ok ? 100 : 0;
+        host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = ok ? "done" : i < phase ? "done" : ""; });
+        q("b").className = "bar"; q("i").style.width = (ok ? 100 : 0) + "%"; q("t").textContent = msg; host.firstChild.classList.toggle("er", !ok);
+        q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s";
+      }
+    };
+  }
   function busy(btn, fn) {
     btn.disabled = true;
     var done = function () { btn.disabled = false; };
-    fn().then(done, function (e) { done(); alert(e.message); });
+    fn().then(done, function (e) { done(); notify(e); });
   }
 
   // ---------- tabs ----------
@@ -56,7 +114,7 @@
 
   // ---------- Proyecto ----------
   function step(n, title, sub, status, action) {
-    return '<div class="card step"><span class="num">' + n + '</span><div class="grow"><b>' + title + '</b><span class="mut">' + sub + "</span></div>" + status + action + "</div>";
+    return '<div class="card step"><span class="num">' + n + '</span><div><b>' + title + '</b><span class="mut">' + sub + '</span></div><div class="st">' + status + '</div><div class="act">' + action + "</div></div>";
   }
   function renderProject() {
     var c = $("proyecto"), p = project, k = p.counts || {};
@@ -71,7 +129,7 @@
     c.innerHTML = '<div><h1>Preparar la app</h1><p class="sub">Tres pasos. Puedes repetir cualquiera cuando cambie el código.</p></div>' + s1 + s2 + s3 +
       '<pre class="log" id="log1" hidden></pre><div class="card"><h2>Entorno</h2><div id="env" class="mut">Comprobando…</div></div>';
     if ($("init")) $("init").onclick = function () { api("/api/init", "POST", { framework: $("fw").value }).then(load); };
-    $("gen").onclick = function () { busy(this, function () { return job("/api/ai/run", {}, "log1").then(function (r) { return load().then(function () { if (r.status === "failed") alert("La generación falló. Revisa el registro."); }); }); }); };
+    $("gen").onclick = function () { busy(this, function () { return job("/api/ai/run", {}, "log1").then(function (r) { return load().then(function () { if (r.status === "failed") notify("La generación con IA ha fallado. Revisa el registro de debajo para ver el motivo.", "La generación falló"); }); }); }); };
     $("val").onclick = function () {
       busy(this, function () { return api("/api/validate", "POST").then(function (r) {
         var errs = r.issues.filter(function (i) { return i.severity === "error"; }).length, warns = r.issues.length - errs;
@@ -86,25 +144,24 @@
 
   // ---------- IA ----------
   function renderIa() {
-    api("/api/ai").then(function (cfg) {
-      ai = cfg; var names = Object.keys(cfg.providers);
-      var rows = STAGES.map(function (s) {
-        var sc = cfg.stages[s[0]] || { provider: names[0] };
-        return '<tr><td><b>' + s[1] + '</b><div class="mut small">' + s[2] + '</div></td><td><select data-s="' + s[0] + '" data-k="provider" aria-label="Proveedor de ' + s[1] + '">' + names.map(function (n) { return "<option" + (n === sc.provider ? " selected" : "") + ">" + esc(n) + "</option>"; }).join("") + '</select></td><td><input type="text" data-s="' + s[0] + '" data-k="model" value="' + esc(sc.model || "") + '" placeholder="modelo del CLI" aria-label="Modelo de ' + s[1] + '"></td><td><div class="row"><button class="btn" data-test="' + s[0] + '">Probar</button><span data-res="' + s[0] + '"></span></div></td></tr>';
-      }).join("");
-      $("ia").innerHTML = '<div><h1>Modelos por etapa</h1><p class="sub">Cada etapa puede usar otro proveedor y otro modelo. El nombre del modelo se pasa tal cual al CLI.</p></div><div class="card"><table><tr><th>Etapa</th><th>Proveedor</th><th>Modelo</th><th></th></tr>' + rows + '</table><div class="row" style="margin-top:16px"><label class="f">Reintentos de reparación<input type="number" id="maxr" min="0" max="10" value="' + cfg.settings.maxRepairs + '" style="width:90px"></label><span class="grow"></span><span id="saved"></span><button class="btn p" id="save">Guardar</button></div></div><p class="mut small">Comandos y argumentos avanzados: archivo .chipchop/ai.yaml (por app) o la carpeta de usuario (para todas).</p>';
-      var root = $("ia");
+    Promise.all([api("/api/ai"), api("/api/ai/info")]).then(function (r) {
+      var cfg = r[0], info = r[1]; ai = cfg;
+      var missing = Object.keys(info).filter(function (n) { return !info[n].found; });
+      var ex = function (s) { return '<div class="row"><button class="btn" data-test="' + s + '">Probar esta etapa</button><span data-res="' + s + '"></span></div>'; };
+      $("ia").innerHTML = '<div><h1>Modelos por etapa</h1><p class="sub">Cada etapa puede usar otra herramienta y otro modelo. Elige la herramienta y el modelo de la lista; si tu CLI tiene uno que no sale, usa «Otro…».</p></div>' +
+        (missing.length === Object.keys(info).length ? '<div class="banner er"><strong>No se encuentra ninguna herramienta de IA.</strong><span class="grow">Instala Claude Code o GitHub Copilot CLI e inicia sesión una vez en una terminal. chip-chop busca en el PATH y en las carpetas habituales de instalación.</span><button class="btn" id="rescan">Volver a buscar</button></div>' : '<div class="row"><span class="mut small grow">Herramientas detectadas: ' + Object.keys(info).filter(function (n) { return info[n].found; }).map(function (n) { return "<b>" + esc(n) + "</b>"; }).join(", ") + '</span><button class="btn" id="rescan">Volver a buscar</button></div>') +
+        '<div class="card">' + ChipAi.rows({ stages: STAGES, cfg: cfg, info: info, extra: ex }) + '<div class="row" style="margin-top:16px;border-top:1px solid #D9C79A;padding-top:16px"><label class="f">Reintentos de reparación<input type="number" id="maxr" min="0" max="10" value="' + cfg.settings.maxRepairs + '" style="width:90px"></label><span class="grow"></span><span id="saved"></span><button class="btn p" id="save">Guardar</button></div></div><p class="mut small">Comandos y argumentos avanzados: archivo .chipchop/ai.yaml (por app) o la carpeta de usuario (para todas).</p>';
+      var root = $("ia"); ChipAi.bind(root, { info: info });
+      if ($("rescan")) $("rescan").onclick = function () { busy(this, function () { return api("/api/ai/info?refresh=1").then(function () { renderIa(); }); }); };
       root.querySelectorAll("[data-test]").forEach(function (b) {
         b.onclick = function () {
-          var s = b.dataset.test, res = root.querySelector('[data-res="' + s + '"]');
+          var s = b.dataset.test, res = root.querySelector('[data-res="' + s + '"]'), v = ChipAi.read(root.querySelector('.ai-stage[data-stage="' + s + '"]'));
           res.innerHTML = '<span class="mut">probando…</span>';
-          busy(b, function () { return api("/api/ai/test", "POST", { provider: root.querySelector('select[data-s="' + s + '"]').value, model: root.querySelector('input[data-s="' + s + '"]').value || undefined }).then(function (r) { res.innerHTML = r.ok ? badge("Funciona", "ok") : badge("Falla", "er") + ' <span class="small">' + esc(r.output).slice(0, 120) + "</span>"; }); });
+          busy(b, function () { return api("/api/ai/test", "POST", { provider: v.provider, model: v.model }).then(function (t) { res.innerHTML = t.ok ? badge("Funciona", "ok") : badge("Falla", "er") + ' <span class="small">' + esc(t.output).slice(0, 160) + "</span>"; }); });
         };
       });
       $("save").onclick = function () {
-        var stages = {};
-        STAGES.forEach(function (s) { var o = { provider: root.querySelector('select[data-s="' + s[0] + '"]').value }, m = root.querySelector('input[data-s="' + s[0] + '"]').value.trim(); if (m) o.model = m; stages[s[0]] = o; });
-        api("/api/ai", "PUT", { providers: cfg.providers, stages: stages, settings: { maxRepairs: Number($("maxr").value) } }).then(function () { $("saved").innerHTML = badge("Guardado", "ok"); return api("/api/ai").then(function (c) { ai = c; }); }).catch(function (e) { $("saved").innerHTML = badge("Error: " + e.message, "er"); });
+        api("/api/ai", "PUT", { providers: cfg.providers, stages: ChipAi.collect(root), settings: { maxRepairs: Number($("maxr").value) } }).then(function () { $("saved").innerHTML = badge("Guardado", "ok"); return api("/api/ai").then(function (c) { ai = c; }); }).catch(function (e) { $("saved").innerHTML = badge("Error: " + e.message, "er"); });
       };
     });
   }
@@ -156,7 +213,7 @@
   // ---------- Actualizar ----------
   function renderUpdate() {
     var el = $("actualizar");
-    el.innerHTML = '<div><h1>Actualizaciones</h1><p class="sub">chip-chop lee las versiones publicadas en GitHub.</p></div><div class="card" id="upcard">Buscando…</div><div class="card"><h2>Canal</h2><label class="radio"><input type="radio" name="canal" value="stable"><span><b>Solo estables</b><br><span class="mut small">Solo versiones finales. Ignora las candidatas (rc).</span></span></label><label class="radio"><input type="radio" name="canal" value="latest"><span><b>Últimas</b><br><span class="mut small">Siempre la más reciente, sea candidata (rc) o final. La final gana a sus candidatas.</span></span></label></div><pre class="log" id="log3" hidden></pre>';
+    el.innerHTML = '<div><h1>Actualizaciones</h1><p class="sub">chip-chop lee las versiones publicadas en GitHub.</p></div><div class="card" id="upcard">Buscando…</div><div class="card"><h2>Canal</h2><label class="radio"><input type="radio" name="canal" value="stable"><span><b>Solo estables</b><br><span class="mut small">Solo versiones finales. Ignora las candidatas (rc).</span></span></label><label class="radio"><input type="radio" name="canal" value="latest"><span><b>Últimas</b><br><span class="mut small">Siempre la más reciente, sea candidata (rc) o final. La final gana a sus candidatas.</span></span></label></div><div id="upprog"></div>';
     el.querySelectorAll('input[name="canal"]').forEach(function (r) { r.onchange = function () { api("/api/update/channel", "POST", { channel: r.value }).then(fill); }; });
     fill();
     function fill() {
@@ -166,7 +223,18 @@
           u.available ? '<div class="small mut">Al actualizar se descarga el paquete de tu sistema y se instala encima. Después hay que reiniciar chip-chop.' + (u.note ? " <b>" + esc(u.note) + "</b>" : "") + ' <a href="' + esc(u.url) + '" target="_blank" rel="noopener">Ver cambios en GitHub</a></div>' : '<div class="small mut">Estás al día.</div>';
         $("upcard").innerHTML = '<div class="row"><div class="grow"><div class="small mut">Instalada</div><b style="font-size:24px">' + esc(u.current || project.version) + '</b></div><div class="grow"><div class="small mut">Disponible en tu canal</div><b style="font-size:24px">' + (u.latest ? esc(u.latest) + " " + (u.available ? badge(u.prerelease ? "Candidata" : "Versión final", u.prerelease ? "wa" : "ok") : badge("Al día", "ok")) : "—") + '</b></div><button class="btn" id="chk">Buscar ahora</button><button class="btn p" id="upd"' + (u.available && !u.note ? "" : " disabled") + '>Actualizar</button></div><div style="margin-top:16px">' + info + "</div>";
         $("chk").onclick = function () { busy(this, function () { return Promise.resolve(fill()); }); };
-        $("upd").onclick = function () { busy(this, function () { return job("/api/update/install", {}, "log3").then(function (r) { if (r.status === "done") $("upcard").insertAdjacentHTML("beforeend", '<div class="banner" style="margin-top:16px"><strong>Listo.</strong><span class="grow">Cierra chip-chop (Ctrl+C) y ábrelo de nuevo para usar la nueva versión.</span></div>'); }); }); };
+        $("upd").onclick = function () {
+          var btn = this, chk = $("chk"), host = $("upprog"), pg = progress(host);
+          btn.disabled = true; chk.disabled = true; btn.textContent = "Actualizando…";
+          job("/api/update/install", {}, null, pg.push).then(function (r) {
+            if (r.status === "done") {
+              pg.end(true, "Actualización instalada");
+              return dialog({ kind: "ok", title: "Actualización instalada", message: "Cierra chip-chop (Ctrl+C en la terminal) y ábrelo de nuevo para usar la nueva versión.", buttons: [{ label: "Entendido", primary: true, value: true }] });
+            }
+            pg.end(false, "La actualización ha fallado"); btn.disabled = false; chk.disabled = false; btn.textContent = "Actualizar";
+            return dialog({ kind: "er", title: "La actualización ha fallado", message: "No se ha podido instalar la nueva versión. La que tenías sigue funcionando.", detail: "Abre «Ver detalles» en el panel de progreso para ver el motivo." });
+          }, function (e) { pg.end(false, "La actualización ha fallado"); btn.disabled = false; chk.disabled = false; btn.textContent = "Actualizar"; return notify(e, "No se ha podido actualizar"); });
+        };
       });
     }
   }

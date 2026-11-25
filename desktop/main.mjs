@@ -130,8 +130,8 @@ function fixPath() {
 
 async function loadCore() {
   const url = (f) => pathToFileURL(path.join(coreDir, "dist", f)).href;
-  const [server, updater, ai, doctor, init] = await Promise.all([import(url("server.js")), import(url("updater.js")), import(url("ai.js")), import(url("doctor.js")), import(url("init.js"))]);
-  return { startUi: server.startUi, checkForUpdate: updater.checkForUpdate, getChannel: updater.getChannel, setChannel: updater.setChannel, currentVersion: updater.currentVersion, loadAiConfig: ai.loadAiConfig, globalAiPath: ai.globalAiPath, doctor: doctor.doctor, initProject: init.initProject };
+  const [server, updater, ai, doctor, init, aiInfo] = await Promise.all([import(url("server.js")), import(url("updater.js")), import(url("ai.js")), import(url("doctor.js")), import(url("init.js")), import(url("aiInfo.js"))]);
+  return { startUi: server.startUi, checkForUpdate: updater.checkForUpdate, getChannel: updater.getChannel, setChannel: updater.setChannel, currentVersion: updater.currentVersion, loadAiConfig: ai.loadAiConfig, globalAiPath: ai.globalAiPath, doctor: doctor.doctor, aiInfo: aiInfo.aiInfo, initProject: init.initProject };
 }
 
 // ───────── Chromium (Playwright): se descarga la primera vez, desde la pantalla de Inicio ─────────
@@ -199,7 +199,7 @@ async function goHome() {
 
 function createWindow() {
   const rb = restoredBounds();
-  win = new BrowserWindow({ width: rb.width, height: rb.height, ...(rb.x !== undefined ? { x: rb.x, y: rb.y } : {}), minWidth: 900, minHeight: 600, backgroundColor: "#F1DFB8", title: "Chip Chop", icon: path.join(here, "build", "icon.png"), webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(here, "preload.cjs") } });
+  win = new BrowserWindow({ width: rb.width, height: rb.height, ...(rb.x !== undefined ? { x: rb.x, y: rb.y } : {}), minWidth: 900, minHeight: 600, autoHideMenuBar: process.platform !== "darwin", backgroundColor: "#F1DFB8", title: "Chip Chop", icon: path.join(here, "build", "icon.png"), webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(here, "preload.cjs") } });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(HOME_GO)) {
       goHome();
@@ -253,6 +253,8 @@ async function installUpdate(log) {
   autoUpdater.allowDowngrade = false;
   autoUpdater.setFeedURL({ provider: "generic", url: feed.url, channel: feed.channel });
   log(`descargando ${info.latest}`);
+  autoUpdater.removeAllListeners("download-progress");
+  autoUpdater.on("download-progress", (p) => log(`progreso: ${Math.round(p.percent)}%`));
   const found = await autoUpdater.checkForUpdates();
   if (!found?.updateInfo) throw new Error("el actualizador no encontró la versión");
   await autoUpdater.downloadUpdate();
@@ -308,7 +310,7 @@ function gitCheck() {
   return { name: "git", ok: !!v, detail: v || "not found on PATH", required: true };
 }
 
-async function homeState() {
+async function homeState(refreshAi = false) {
   let checks = [];
   let aiError = "";
   try {
@@ -321,7 +323,7 @@ async function homeState() {
   let ai = { providers: {}, stages: {}, globalPath: core.globalAiPath(), error: "" };
   try {
     const cfg = core.loadAiConfig(app.getPath("userData"));
-    ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath(), error: "" };
+    ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath(), error: "", info: await core.aiInfo(cfg, refreshAi).catch(() => ({})) };
   } catch (e) {
     ai.error = String(e?.message ?? e) || aiError; // el ai.yaml global está mal escrito: la pantalla de IA lo explica
   }
@@ -333,6 +335,7 @@ async function homeState() {
     channel: core.getChannel(),
     updateMode: updateMode({ platform: process.platform, appImage: Boolean(process.env.APPIMAGE) }),
     cssHref: pathToFileURL(path.join(coreDir, "ui", "style.css")).href,
+    aiEditorHref: pathToFileURL(path.join(coreDir, "ui", "ai-editor.js")).href,
     logoHref: pathToFileURL(path.join(here, "build", "icon.png")).href,
     chromium: { installed: chromiumInstalled() },
     projects: projects().map((p) => ({ path: p.path, name: path.basename(p.path), lastOpened: p.lastOpened || 0, exists: existsSync(p.path), initialized: existsSync(path.join(p.path, ".chipchop")), framework: guessFramework(p.path), lastReport: lastReport(p.path) })),
@@ -374,7 +377,7 @@ function initProjectIn(dir, framework) {
 }
 
 function registerIpc() {
-  ipcMain.handle("home:state", () => homeState());
+  ipcMain.handle("home:state", (_e, opts) => homeState(Boolean(opts && opts.refreshAi)));
   ipcMain.handle("home:addProject", async () => {
     const r = await dialog.showOpenDialog(win, { title: "Elige la carpeta del proyecto (la app que quieres auditar)", properties: ["openDirectory", "createDirectory"] });
     if (r.canceled) return null;
