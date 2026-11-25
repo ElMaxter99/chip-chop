@@ -1,6 +1,6 @@
 # Cómo se publica una versión
 
-Flujo copiado de [pdf-annotator](https://github.com/ElMaxter99/pdf-annotator) y adaptado a chip-chop (sin Electron: los «instaladores» son los paquetes `chip-chop-<versión>-{linux.tar.gz,macos.tar.gz,windows.zip}` más el `.tgz` de npm).
+Flujo copiado de [pdf-annotator](https://github.com/ElMaxter99/pdf-annotator) y adaptado a chip-chop Cada release lleva **instalables nativos** de la app de escritorio (Electron, carpeta `desktop/`: `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`, más los `latest*.yml` del actualizador) y los **paquetes para terminal** `chip-chop-<versión>-{linux.tar.gz,macos.tar.gz,windows.zip}` y el `.tgz` de npm.
 **Diferencia con pdf-annotator:** aquí solo hay rama `main` (sin `develop`/`master`/`release/*`), y la etiqueta la crea el propio workflow al publicar, porque el entorno donde se desarrolla no puede empujar etiquetas.
 
 ## Parte A · Para personas
@@ -23,11 +23,14 @@ Flujo copiado de [pdf-annotator](https://github.com/ElMaxter99/pdf-annotator) y 
   - `release.yml` (push a `main` que cambie `packages/core/package.json`, `scripts/**` o el propio workflow; o a mano): decide si `vX.Y.Z` ya existe (`gh release view`); si no, checks + e2e + `scripts/make-bundle.sh` + smoke de Linux; `smoke-windows` (bloquea); `smoke-macos` (**informativo**, `continue-on-error`); `publish`: borrador con todos los archivos y notas → publica y comprueba que la etiqueta quedó fijada.
   - `release-candidate.yml` (solo a mano; `dry_run` por defecto): valida `X.Y.Z`, falla si ya es final, calcula `rc.N`, aplica la versión solo en el runner (`npm version … --no-git-tag-version`), mismos checks y paquetes, y publica como **pre-release** con aviso de prueba.
   - `ci.yml`: `check` y `e2e` en Linux y Windows; `macos` informativo; `changelog` en PR (falla si se toca la app sin entrada).
+- Job `installers` (4 sistemas; los de macOS informativos): `node desktop/prepare-core.mjs` (núcleo + dependencias de producción en `desktop/app-core`) y `electron-builder` desde `desktop/`; `publish` une los dos `*-mac.yml` (`scripts/merge-mac-feed.mjs`) y adjunta todo. `ci.yml` (job `desktop`) empaqueta con `--dir`, comprueba el contenido (`desktop/verify-pack.mjs`) y arranca la app empaquetada (`desktop/smoke.mjs`).
+- La app de escritorio actualiza con `electron-updater` (feed «generic» de la versión que elige el núcleo): automático en Windows y AppImage, manual (abre la página de descargas) en macOS, `.deb` y `.rpm`.
 - El actualizador (`packages/core/src/updater.ts`) elige la release así: `stable` solo versiones finales, `latest` además `-rc.N`; la final gana a sus RC; los borradores nunca cuentan; busca el asset `-linux.tar.gz`, `-windows.zip` o `-macos.tar.gz`.
 
 ### Problemas conocidos
 - Un **borrador** que quede de un intento fallido hace que `gh release view` diga que «ya existe»: borrarlo a mano (con aprobación del usuario) y relanzar.
 - Una release publicada como `untagged-…` no la ve el actualizador: el workflow fija `--tag` y lo comprueba; si falla, editar la release en la web y elegir la etiqueta.
 - **macOS no se ha validado nunca en un Mac real**: el paquete, el instalador (`install.sh`, quita la cuarentena de Gatekeeper), `chip-chop update` y `chip-chop ui` (`open`) están sin probar más allá del smoke del runner.
+- Los instalables no van firmados (SmartScreen / Gatekeeper avisan); el `.exe`, el `.dmg` y los de Linux nunca se han instalado a mano: solo se ha probado que el empaquetado arranca en el CI.
 - Los paquetes no van firmados; no hay firma ni notarización.
 - Publicar en npm es manual: `npm publish --workspace chip-chop --access public` (el nombre `chip-chop` no está verificado).

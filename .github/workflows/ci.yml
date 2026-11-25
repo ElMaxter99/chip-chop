@@ -75,3 +75,48 @@ jobs:
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:e2e --workspace chip-chop
+
+  # Instalables: empaqueta la app de escritorio (sin instalador) en cada sistema, comprueba el contenido y la arranca de verdad.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          - os: windows-latest
+          - os: macos-latest
+            experimental: true # sin validar en un Mac real
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental == true }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+      - run: node --test desktop/update-logic.test.mjs
+      - run: node desktop/prepare-core.mjs
+      - run: npm install --no-audit --no-fund
+        working-directory: desktop
+      - name: Empaquetar (sin instalador)
+        run: npx electron-builder --dir --publish never
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - run: node desktop/verify-pack.mjs
+      - name: Arrancar la app empaquetada (Linux, con pantalla virtual)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node desktop/smoke.mjs
+      - name: Arrancar la app empaquetada
+        if: runner.os != 'Linux'
+        run: node desktop/smoke.mjs
+      - name: Paquetes .deb y .rpm (solo Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpm
+          npx electron-builder --linux deb rpm --publish never
+          ls ../release/*.deb ../release/*.rpm
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"

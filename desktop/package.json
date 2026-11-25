@@ -1,0 +1,15 @@
+{
+  "name": "chip-chop-desktop",
+  "productName": "Chip Chop",
+  "version": "0.3.0",
+  "description": "Chip Chop: la app local de chip-chop como programa instalable",
+  "author": "ElMaxter99",
+  "homepage": "https://github.com/ElMaxter99/chip-chop",
+  "license": "MIT",
+  "type": "module",
+  "main": "main.mjs",
+  "desktopName": "chip-chop-desktop.desktop",
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  }
+}

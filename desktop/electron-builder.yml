@@ -1,0 +1,44 @@
+# Empaquetado de la app de escritorio. `npm run desktop:pack` (sin instalador) y los workflows de release.
+appId: com.elmaxter99.chip-chop
+productName: Chip Chop
+electronVersion: 45.3.1
+directories:
+  output: ../release
+  buildResources: build
+artifactName: chip-chop-${version}-${os}-${arch}.${ext}
+asar: true
+icon: build/icon.png
+afterPack: desktop/after-pack.cjs
+extraResources:
+  - from: app-core
+    to: core
+    filter:
+      - "**/*"
+      - "!node_modules/**"
+publish:
+  provider: github
+  owner: ElMaxter99
+  repo: chip-chop
+  releaseType: draft
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  notarize: false
+linux:
+  syncDesktopName: true
+  category: Development
+  target:
+    - AppImage
+    - deb
+    - rpm
+  maintainer: ElMaxter99

@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.next.outputs.tag }}
+      version: ${{ steps.next.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate the version and pick the next rc number
@@ -93,6 +94,61 @@ jobs:
           & (Join-Path $dir "install.ps1")
           & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" --version
 
+  # Instalables nativos de la app de escritorio (Windows .exe, macOS .dmg, Linux AppImage/.deb/.rpm), uno por sistema.
+  # Los de macOS son informativos: no se han probado en un Mac real y su fallo no bloquea la release.
+  installers:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-24.04
+            name: linux
+          - os: macos-latest
+            name: macos-arm64
+            experimental: true
+          - os: macos-15-intel
+            name: macos-x64
+            experimental: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental == true }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Aplicar la versión de la candidata (no se confirma)
+        run: npm version "${{ needs.build.outputs.version }}" --no-git-tag-version --workspace chip-chop
+      - run: npm install
+      - run: npm run build
+      - run: node desktop/prepare-core.mjs
+      - run: npm install --no-audit --no-fund
+        working-directory: desktop
+      - name: Herramientas de Linux (rpm)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Instaladores
+        run: npx electron-builder --publish never
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Reunir los archivos que se publican
+        shell: bash
+        run: |
+          mkdir -p stage
+          cd release
+          for f in *.exe *.dmg *.zip *.AppImage *.deb *.rpm *.blockmap *.yml; do
+            [ -e "$f" ] && case "$f" in builder-*) ;; *) cp "$f" ../stage/ ;; esac
+          done
+          ls -la ../stage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.name }}
+          path: stage/*
+          if-no-files-found: error
+
   # macOS: informativo. Nadie ha probado chip-chop en un Mac real; este job solo comprueba que el paquete se instala
   # y arranca en el runner. Si falla, no bloquea la publicación (se avisa en las notas de la release).
   smoke-macos:
@@ -114,14 +170,32 @@ jobs:
           "$HOME/.local/bin/chip-chop" help | head -3
 
   publish:
-    needs: [build, smoke-windows, smoke-macos]
-    if: ${{ !cancelled() && !inputs.dry_run && needs.build.result == 'success' && needs.smoke-windows.result == 'success' }}
+    needs: [build, smoke-windows, smoke-macos, installers]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.build.result == 'success' && needs.smoke-windows.result == 'success' && needs.installers.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: bundles
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: installers
+      - name: Unir los feeds de macOS (arm64 + Intel) y reunir los instaladores
+        run: |
+          mkdir -p assets
+          for d in installers/*; do
+            case "$d" in *macos-*) ;; *) cp "$d"/* assets/ ;; esac
+          done
+          A=$(ls installers/installers-macos-arm64/*-mac.yml 2>/dev/null | head -1 || true)
+          B=$(ls installers/installers-macos-x64/*-mac.yml 2>/dev/null | head -1 || true)
+          for d in installers/installers-macos-*; do
+            [ -d "$d" ] && for f in "$d"/*; do case "$f" in *-mac.yml) ;; *) cp "$f" assets/ ;; esac; done
+          done
+          if [ -n "$A" ] && [ -n "$B" ]; then node scripts/merge-mac-feed.mjs "$A" "$B" --out "assets/$(basename "$A")"
+          elif [ -n "$A$B" ]; then cp "$A$B" assets/; fi
+          ls -la assets
       - name: Create the pre-release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -130,5 +204,5 @@ jobs:
           TAG="${{ needs.build.outputs.tag }}"
           node scripts/release-notes.mjs "${TAG#v}" --out notes.md
           if [ "${{ needs.smoke-macos.result }}" != "success" ]; then printf '\n> El paquete de macOS no pasó la comprobación automática (o no se ha validado nunca en un Mac real).\n' >> notes.md; fi
-          gh release create "$TAG" chip-chop-*-linux.tar.gz chip-chop-*-macos.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --draft --prerelease --target "$GITHUB_SHA" --title "chip-chop $TAG (release candidate)" --notes-file notes.md
+          gh release create "$TAG" chip-chop-*-linux.tar.gz chip-chop-*-macos.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz assets/* --draft --prerelease --target "$GITHUB_SHA" --title "chip-chop $TAG (release candidate)" --notes-file notes.md
           gh release edit "$TAG" --draft=false --prerelease --tag "$TAG"

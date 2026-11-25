@@ -36,7 +36,12 @@ export interface UiServer {
   close(): Promise<void>;
 }
 
-export async function startUi(appDir: string, port = 0): Promise<UiServer> {
+/** Hooks para quien incrusta la app (la de escritorio sustituye la instalación de actualizaciones por la suya). */
+export interface UiOptions {
+  installUpdate?: (log: (l: string) => void) => Promise<unknown>;
+}
+
+export async function startUi(appDir: string, port = 0, options: UiOptions = {}): Promise<UiServer> {
   const token = randomBytes(16).toString("hex");
   const jobs = new Map<string, Job>();
   let current: Job | undefined;
@@ -154,7 +159,7 @@ export async function startUi(appDir: string, port = 0): Promise<UiServer> {
         return void send(res, 200, { channel: b.channel });
       }
       if (u.pathname === "/api/update/install" && req.method === "POST") {
-        const job = start("update", (log) => installUpdate({ log }));
+        const job = start("update", (log) => (options.installUpdate ? options.installUpdate(log) : installUpdate({ log })));
         return void send(res, 200, { job: job.id });
       }
       if (u.pathname === "/api/doctor" && req.method === "GET") return void send(res, 200, await doctor(appDir));

@@ -2,6 +2,23 @@
 
 ## 1. Install
 
+### Installers (desktop app, no terminal needed)
+
+From the [latest GitHub Release](https://github.com/ElMaxter99/chip-chop/releases) download the file for your system:
+
+| System | File |
+| --- | --- |
+| Windows 10/11 (64-bit) | `chip-chop-<version>-win-x64.exe` |
+| macOS, Apple silicon (untested) | `chip-chop-<version>-mac-arm64.dmg` |
+| macOS, Intel (untested) | `chip-chop-<version>-mac-x64.dmg` |
+| Debian, Ubuntu, Mint | `chip-chop-<version>-linux-amd64.deb` |
+| Fedora, openSUSE | `chip-chop-<version>-linux-x86_64.rpm` |
+| Any other Linux | `chip-chop-<version>-linux-x86_64.AppImage` |
+
+The installers are **not signed**: Windows SmartScreen and macOS Gatekeeper warn the first time (Windows: *More info → Run anyway*; macOS: right-click → *Open*, or `xattr -cr "/Applications/Chip Chop.app"`). On first launch the app asks for the project folder (change it later with *File → Open project*) and downloads Chromium once. Updates: *Project* tab → update (Windows and AppImage install by themselves; macOS, `.deb` and `.rpm` open the downloads page).
+
+### Terminal bundles
+
 Download `chip-chop-<version>-linux.tar.gz` from the [latest GitHub Release](https://github.com/ElMaxter99/chip-chop/releases), then:
 
 ```bash
