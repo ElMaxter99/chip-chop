@@ -17,20 +17,31 @@ body{visibility:hidden}
 .spin{display:inline-block;width:14px;height:14px;border:3px solid var(--ink);border-right-color:transparent;border-radius:50%;animation:s 1s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes s{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.stack{display:flex;flex-direction:column;gap:12px;margin:0 0 16px}.stack:empty{display:none}
+.acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.proj>.grow{display:flex;flex-direction:column;gap:4px;min-width:240px}
+.steps{list-style:none;margin:16px auto 0;padding:0;max-width:560px;text-align:left;display:flex;flex-direction:column;gap:14px}
+.steps li{display:flex;gap:12px;align-items:flex-start}.steps .num{flex:none}
+.skip{position:absolute;left:8px;top:-60px;z-index:10;background:var(--sf);color:var(--ink);border:2px solid var(--ink);border-radius:6px;padding:8px 14px;font-weight:800}
+.skip:focus{top:8px}
+a:focus-visible,summary:focus-visible,.radio:focus-within,main:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+nav [role=tab]:focus-visible,.ver:focus-visible{outline:3px solid var(--sf);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Saltar al contenido</a>
 <header class="top"><div class="top-in">
   <strong class="brand">chip-chop</strong>
-  <nav id="tabs"><button data-tab="proyectos" class="on">Proyectos</button><button data-tab="ia">IA</button><button data-tab="ajustes">Ajustes</button></nav>
-  <button id="ver" class="ver" data-tab="ajustes">v…</button>
+  <nav id="tabs" role="tablist" aria-label="Secciones"><button role="tab" id="tab-proyectos" data-tab="proyectos" aria-controls="proyectos" aria-selected="true" class="on">Proyectos</button><button role="tab" id="tab-ia" data-tab="ia" aria-controls="ia" aria-selected="false" tabindex="-1">IA</button><button role="tab" id="tab-ajustes" data-tab="ajustes" aria-controls="ajustes" aria-selected="false" tabindex="-1">Ajustes</button></nav>
+  <button id="ver" class="ver" data-tab="ajustes" aria-label="Versión instalada; abrir Ajustes">v…</button>
 </div></header>
-<main>
-  <section id="browser"></section>
-  <section id="proyectos" class="tab"></section>
-  <section id="ia" class="tab" hidden></section>
-  <section id="ajustes" class="tab" hidden></section>
+<main id="main" tabindex="-1">
+  <section id="browser" role="status" aria-live="polite"></section>
+  <section id="proyectos" class="tab" role="tabpanel" aria-labelledby="tab-proyectos"></section>
+  <section id="ia" class="tab" role="tabpanel" aria-labelledby="tab-ia" hidden></section>
+  <section id="ajustes" class="tab" role="tabpanel" aria-labelledby="tab-ajustes" hidden></section>
 </main>
 <script src="home.js"></script>
 </body>

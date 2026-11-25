@@ -4,7 +4,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import electronUpdater from "electron-updater";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,6 +17,9 @@ const coreDir = process.env.CHIPCHOP_CORE || (app.isPackaged ? path.join(process
 const requireCore = createRequire(path.join(coreDir, "package.json"));
 const statePath = () => path.join(app.getPath("userData"), "state.json");
 const HOME_GO = "chipchop-home:";
+
+const SMOKE = process.env.CHIPCHOP_SMOKE === "1";
+if (SMOKE) app.setPath("userData", mkdtempSync(path.join(tmpdir(), "cc-smoke-data-"))); // la prueba automática no toca el estado real
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -59,8 +63,8 @@ function fixPath() {
 
 async function loadCore() {
   const url = (f) => pathToFileURL(path.join(coreDir, "dist", f)).href;
-  const [server, updater, ai, doctor] = await Promise.all([import(url("server.js")), import(url("updater.js")), import(url("ai.js")), import(url("doctor.js"))]);
-  return { startUi: server.startUi, checkForUpdate: updater.checkForUpdate, getChannel: updater.getChannel, setChannel: updater.setChannel, currentVersion: updater.currentVersion, loadAiConfig: ai.loadAiConfig, globalAiPath: ai.globalAiPath, doctor: doctor.doctor };
+  const [server, updater, ai, doctor, init] = await Promise.all([import(url("server.js")), import(url("updater.js")), import(url("ai.js")), import(url("doctor.js")), import(url("init.js"))]);
+  return { startUi: server.startUi, checkForUpdate: updater.checkForUpdate, getChannel: updater.getChannel, setChannel: updater.setChannel, currentVersion: updater.currentVersion, loadAiConfig: ai.loadAiConfig, globalAiPath: ai.globalAiPath, doctor: doctor.doctor, initProject: init.initProject };
 }
 
 // ───────── Chromium (Playwright): se descarga la primera vez, desde la pantalla de Inicio ─────────
@@ -98,7 +102,7 @@ function installChromium() {
 }
 
 // ───────── Proyectos + servidor local ─────────
-async function openProject(appDir) {
+async function openProject(appDir, tab) {
   if (!chromiumInstalled()) throw new Error("Falta el navegador de capturas: espera a que termine la descarga.");
   if (ui) await ui.close().catch(() => {});
   ui = await core.startUi(appDir, 0, { installUpdate });
@@ -107,6 +111,13 @@ async function openProject(appDir) {
   saveProjects(list);
   win.setTitle(`Chip Chop · ${path.basename(appDir)}`);
   await win.loadURL(ui.url);
+  if (tab) await showUiTab(tab);
+}
+
+/** Cambia de pestaña en la interfaz del proyecto (la misma que se usa con el ratón). Solo nombres conocidos. */
+async function showUiTab(tab) {
+  if (!["informes", "comparar", "ia"].includes(tab)) return false;
+  return win.webContents.executeJavaScript(`(function(){var b=document.querySelector('[data-tab="${tab}"]');if(!b)return false;b.click();return true})()`).catch(() => false);
 }
 
 async function goHome() {
@@ -174,16 +185,72 @@ async function installUpdate(log) {
 }
 
 // ───────── Pantalla de Inicio: lo que pide la interfaz ─────────
+const FRAMEWORKS = ["angularjs", "angular", "react", "other"];
+
+/** Última comparación guardada de un proyecto (la del report.json más reciente), o null. Nunca lanza. */
+function lastReport(dir) {
+  const root = path.join(dir, ".chipchop", "reports");
+  let best = null;
+  try {
+    for (const d of readdirSync(root)) {
+      try {
+        const r = JSON.parse(readFileSync(path.join(root, d, "report.json"), "utf8"));
+        const at = Date.parse(r.generatedAt);
+        if (!r.summary || Number.isNaN(at) || (best && at <= best.at)) continue;
+        const s = r.summary;
+        const n = (k) => Number(s[k]) || 0;
+        const changed = n("visualOnly") + n("structural") + n("added") + n("removed");
+        best = { at, dir: d, base: String(r.base?.name ?? "?"), head: String(r.head?.name ?? "?"), mode: r.mode === "flow-audit" ? "flow-audit" : "restyle", states: n("identical") + changed + n("failed"), failed: n("failed"), changed, result: n("failed") > 0 ? "failed" : changed > 0 ? "changes" : "identical" };
+      } catch {
+        /* informe ilegible: se ignora */
+      }
+    }
+  } catch {
+    /* no hay carpeta de informes */
+  }
+  return best && { ...best, generatedAt: best.at, at: undefined };
+}
+
+/** Elige el marco por las dependencias del package.json; si no se reconoce, «other». */
+function guessFramework(dir) {
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+    const d = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+    if (d["@angular/core"]) return "angular";
+    if (d.angular) return "angularjs";
+    if (d.react || d.next) return "react";
+  } catch {
+    /* sin package.json legible */
+  }
+  return "other";
+}
+
+function gitCheck() {
+  const r = spawnSync("git", ["--version"], { encoding: "utf8", timeout: 8000 });
+  const v = r.error || r.status !== 0 ? "" : String(r.stdout).trim();
+  return { name: "git", ok: !!v, detail: v || "not found on PATH", required: true };
+}
+
 async function homeState() {
-  const checks = await core.doctor(app.getPath("userData")).catch(() => []);
-  let ai = { providers: {}, stages: {}, globalPath: core.globalAiPath() };
+  let checks = [];
+  let aiError = "";
+  try {
+    checks = await core.doctor(app.getPath("userData"));
+  } catch (e) {
+    // doctor lee el ai.yaml global: si está roto no hay lista de herramientas, pero git sí se puede comprobar
+    aiError = String(e?.message ?? e);
+    checks = [gitCheck()];
+  }
+  let ai = { providers: {}, stages: {}, globalPath: core.globalAiPath(), error: "" };
   try {
     const cfg = core.loadAiConfig(app.getPath("userData"));
-    ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath() };
-  } catch {
-    /* el ai.yaml global está mal escrito: se muestran los valores vacíos */
+    ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath(), error: "" };
+  } catch (e) {
+    ai.error = String(e?.message ?? e) || aiError; // el ai.yaml global está mal escrito: la pantalla de IA lo explica
   }
   return {
+    smoke: SMOKE,
+    os: process.platform,
     version: app.getVersion(),
     platform: `${process.platform} ${process.arch}`,
     channel: core.getChannel(),
@@ -191,7 +258,7 @@ async function homeState() {
     cssHref: pathToFileURL(path.join(coreDir, "ui", "style.css")).href,
     logoHref: pathToFileURL(path.join(here, "build", "icon.png")).href,
     chromium: { installed: chromiumInstalled() },
-    projects: projects().map((p) => ({ path: p.path, name: path.basename(p.path), lastOpened: p.lastOpened || 0, exists: existsSync(p.path), initialized: existsSync(path.join(p.path, ".chipchop")) })),
+    projects: projects().map((p) => ({ path: p.path, name: path.basename(p.path), lastOpened: p.lastOpened || 0, exists: existsSync(p.path), initialized: existsSync(path.join(p.path, ".chipchop")), framework: guessFramework(p.path), lastReport: lastReport(p.path) })),
     checks: checks.filter((c) => c.name !== "chromium"),
     ai,
   };
@@ -218,6 +285,17 @@ function saveAi(stages) {
   core.loadAiConfig(app.getPath("userData")); // lanza si el resultado no valida
 }
 
+/** Equivalente a `chip-chop init` (sin --force: nunca pisa nada). */
+function initProjectIn(dir, framework) {
+  if (!projects().some((p) => p.path === dir)) throw new Error("Proyecto desconocido");
+  if (!existsSync(dir)) throw new Error("La carpeta ya no existe");
+  if (existsSync(path.join(dir, ".chipchop"))) throw new Error("Este proyecto ya está inicializado");
+  const fw = framework === undefined ? guessFramework(dir) : framework;
+  if (!FRAMEWORKS.includes(fw)) throw new Error("Marco no válido");
+  const r = core.initProject(dir, { framework: fw });
+  return { created: r.created, skipped: r.skipped, framework: fw };
+}
+
 function registerIpc() {
   ipcMain.handle("home:state", () => homeState());
   ipcMain.handle("home:addProject", async () => {
@@ -230,6 +308,11 @@ function registerIpc() {
     if (!projects().some((p) => p.path === dir)) throw new Error("Proyecto desconocido");
     return openProject(dir);
   });
+  ipcMain.handle("home:openReports", (_e, dir) => {
+    if (!projects().some((p) => p.path === dir)) throw new Error("Proyecto desconocido");
+    return openProject(dir, "informes");
+  });
+  ipcMain.handle("home:initProject", (_e, dir, framework) => initProjectIn(String(dir), framework === undefined ? undefined : String(framework)));
   ipcMain.handle("home:removeProject", (_e, dir) => saveProjects(projects().filter((p) => p.path !== dir)));
   ipcMain.handle("home:checkUpdate", () => core.checkForUpdate().catch((e) => ({ error: e.message, channel: core.getChannel(), available: false })));
   ipcMain.handle("home:installUpdate", () => installUpdate(send));
@@ -272,17 +355,59 @@ app.whenReady().then(async () => {
     core = await loadCore();
     registerIpc();
     await goHome();
-    if (process.env.CHIPCHOP_SMOKE === "1") {
-      // prueba automática: sin diálogos ni descargas. Comprueba Inicio (preload + estado) y la interfaz de un proyecto.
+    if (SMOKE) {
+      // prueba automática: sin diálogos ni descargas. Comprueba Inicio (preload + estado + lo nuevo) y la interfaz de un proyecto.
       playwrightCli();
-      const title = await win.webContents.executeJavaScript("document.title");
-      const st = await win.webContents.executeJavaScript('window.chipchop.invoke("home:state").then(s=>s.version+" "+s.projects.length)');
+      const run = (js) => win.webContents.executeJavaScript(js);
+      const must = (cond, msg) => {
+        if (!cond) throw new Error(`smoke: ${msg}`);
+      };
+      const title = await run("document.title");
+      // 1) proyecto nuevo sin .chipchop → «Inicializar» (misma función que `chip-chop init`)
+      const proj = process.env.CHIPCHOP_APP_DIR;
+      saveProjects([{ path: proj, lastOpened: 0 }]);
+      let st = await run('window.chipchop.invoke("home:state")');
+      must(st.projects.length === 1 && !st.projects[0].initialized && !st.projects[0].lastReport, "proyecto sin inicializar");
+      const bad = await run(`window.chipchop.invoke("home:initProject", ${JSON.stringify(proj)}, "nope").then(()=>"sin error",e=>"error")`);
+      must(bad === "error", "debe rechazar un marco desconocido");
+      const bad2 = await run('window.chipchop.invoke("home:initProject", "/no/es/un/proyecto").then(()=>"sin error",e=>"error")');
+      must(bad2 === "error", "debe rechazar proyectos desconocidos");
+      const init = await run(`window.chipchop.invoke("home:initProject", ${JSON.stringify(proj)})`);
+      must(init.created.includes("config.yaml") && existsSync(path.join(proj, ".chipchop", "config.yaml")), "init no creó config.yaml");
+      const again = await run(`window.chipchop.invoke("home:initProject", ${JSON.stringify(proj)}).then(()=>"sin error",e=>"error")`);
+      must(again === "error", "no debe reinicializar");
+      // 2) último informe
+      const rep = path.join(proj, ".chipchop", "reports", "main__vs__rama");
+      mkdirSync(rep, { recursive: true });
+      writeFileSync(path.join(rep, "report.json"), JSON.stringify({ app: "x", base: { name: "main" }, head: { name: "rama" }, mode: "restyle", generatedAt: "2026-01-15T10:00:00Z", summary: { identical: 2, visualOnly: 1, structural: 0, added: 0, removed: 0, failed: 0 }, states: [] }));
+      writeFileSync(path.join(proj, ".chipchop", "reports", "roto.json"), "{");
+      st = await run('window.chipchop.invoke("home:state")');
+      const lr = st.projects[0].lastReport;
+      must(st.projects[0].initialized && lr && lr.states === 3 && lr.result === "changes" && lr.dir === "main__vs__rama", "último informe");
+      // 3) la pantalla pinta lo nuevo (recarga Inicio y espera a que se dibuje)
+      await win.loadFile(path.join(here, "home", "index.html"));
+      const dom = await run(`new Promise((ok)=>{var n=0;(function w(){var t=document.getElementById("proyectos");if(t&&t.querySelector(".proj")||n++>100)return ok({tabs:document.querySelectorAll('[role=tab]').length,sel:document.querySelectorAll('[role=tab][aria-selected=true]').length,rep:/3 estados/.test(t.textContent)&&/cambios/.test(t.textContent),btn:!!t.querySelector("[data-reports]"),init:!!t.querySelector("[data-init]")});setTimeout(w,50)})()})`);
+      must(dom.tabs === 3 && dom.sel === 1 && dom.rep && dom.btn && !dom.init, `DOM de Inicio ${JSON.stringify(dom)}`);
+      // 4) ai.yaml global roto: la pantalla de IA lo dice (y git se sigue comprobando)
+      const home = mkdtempSync(path.join(tmpdir(), "cc-smoke-home-"));
+      const prev = process.env.CHIPCHOP_HOME;
+      process.env.CHIPCHOP_HOME = home;
+      writeFileSync(path.join(home, "ai.yaml"), "stages: [\n  : :");
+      const broken = await homeState();
+      must(broken.ai.error && broken.checks.some((c) => c.name === "git"), "ai.yaml roto debe informar");
+      await win.loadFile(path.join(here, "home", "index.html"));
+      const ai = await run(`new Promise((ok)=>{var n=0;(function w(){var t=document.getElementById("ia");if(t&&t.querySelector("[data-ai-error]")||n++>100)return ok(!!(t&&t.querySelector("[data-ai-error]")&&!t.querySelector("#saveAi")));setTimeout(w,50)})()})`);
+      must(ai === true, "la pantalla de IA debe mostrar el error del ai.yaml");
+      if (prev === undefined) delete process.env.CHIPCHOP_HOME;
+      else process.env.CHIPCHOP_HOME = prev;
+      const st2 = `${st.version} ${st.projects.length}`;
       await ui?.close();
-      ui = await core.startUi(process.env.CHIPCHOP_APP_DIR, 0, { installUpdate });
+      ui = await core.startUi(proj, 0, { installUpdate });
       await win.loadURL(ui.url);
+      must(await showUiTab("informes"), "no se pudo abrir la pestaña Informes del proyecto");
       const uiTitle = await win.webContents.executeJavaScript("document.title");
-      const proj = await win.webContents.executeJavaScript('fetch("/api/project").then(r=>r.json()).then(j=>"ok")').catch((e) => `ERR ${e}`);
-      console.log(`SMOKE_OK home=${title} state=${st} ui=${uiTitle} project=${proj} app=${app.getVersion()}`);
+      const api = await win.webContents.executeJavaScript('fetch("/api/project").then(r=>r.json()).then(j=>"ok")').catch((e) => `ERR ${e}`);
+      console.log(`SMOKE_OK home=${title} state=${st2} init=${init.created.length} report=${lr.result} aiError=${broken.ai.error ? "ok" : "no"} ui=${uiTitle} project=${api} app=${app.getVersion()}`);
       app.exit(0);
     }
   } catch (e) {
