@@ -1,12 +1,15 @@
 name: Release
 
-# Push a tag like v0.1.0 to build, test and publish a GitHub Release with the
-# installable tarball attached. Publishing to npm is a separate, manual workflow
-# step (see docs/RELEASING.md) so a release never depends on an npm token.
+# Creates a GitHub Release (tag vX.Y.Z + installable tarball) when `main` contains a
+# package version that has no release yet. Also runnable by hand from the Actions tab.
+# Publishing to npm is separate and manual (see docs/RELEASING.md).
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [main]
+    paths:
+      - packages/core/package.json
+      - .github/workflows/release.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,20 +19,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm install
-      - run: npm run validate:schemas
-      - run: npm run typecheck
-      - run: npm test
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e --workspace chip-chop
-      - name: Pack
-        run: npm pack --workspace chip-chop
-      - name: Check the tag matches the package version
-        run: test "v$(node -p "require('./packages/core/package.json').version")" = "${GITHUB_REF_NAME}"
-      - name: Create GitHub Release
+      - name: Decide whether this version needs a release
+        id: ver
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" chip-chop-*.tgz --title "chip-chop ${GITHUB_REF_NAME}" --generate-notes
+        run: |
+          V="v$(node -p "require('./packages/core/package.json').version")"
+          echo "tag=$V" >> "$GITHUB_OUTPUT"
+          if gh release view "$V" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.ver.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.ver.outputs.exists == 'false'
+        run: |
+          npm install
+          npm run validate:schemas
+          npm run typecheck
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:e2e --workspace chip-chop
+          npm pack --workspace chip-chop
+      - name: Create GitHub Release
+        if: steps.ver.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.ver.outputs.tag }}" chip-chop-*.tgz --target "$GITHUB_SHA" --title "chip-chop ${{ steps.ver.outputs.tag }}" --generate-notes
