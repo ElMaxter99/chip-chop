@@ -2,13 +2,24 @@
 
 ## 1. Install
 
-Download `chip-chop-0.1.0.tgz` from the [latest GitHub Release](https://github.com/ElMaxter99/chip-chop/releases), then:
+Download `chip-chop-<version>-linux.tar.gz` from the [latest GitHub Release](https://github.com/ElMaxter99/chip-chop/releases), then:
 
 ```bash
-npm install -g ./chip-chop-0.1.0.tgz
-npx playwright install chromium
+tar xzf chip-chop-*-linux.tar.gz
+./chip-chop-*-linux/install.sh      # installs to ~/.local, downloads Chromium
 chip-chop doctor
 ```
+
+On Windows, unzip `chip-chop-<version>-windows.zip` and run, in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\chip-chop-<version>-windows\install.ps1
+```
+
+Open a new terminal afterwards. Supported platforms are Linux and Windows (macOS is not a target for now).
+`build.nodeVersion` (running a legacy build under another Node) only works on Linux through nvm; on Windows start chip-chop under that Node version instead.
+
+(The plain `chip-chop-<version>.tgz` is also attached: `npm install -g ./chip-chop-<version>.tgz` and `npx playwright install chromium`.)
 
 `doctor` checks Node (22+), git, Chromium and whether the `claude` / `copilot` CLIs are on your `PATH`.
 Only the CLIs you actually configure for a stage are needed.
@@ -70,5 +81,23 @@ Honest list, as of v0.1:
   detected as added), the CLI commands, the local server (auth token, host check, report serving), schema
   validation, mock matching, AI argument building and the repair loop (with a fake CLI).
 - **Not tested here:** the Claude CLI end to end (it was not signed in where this was built), the Copilot CLI
-  (not installed; its flags follow its documentation and may need `extraArgs`), Windows, the ``
-  nvm wrapper, and any real AngularJS/Angular/React app. Those are exactly what your first run will show.
+  (not installed; its flags follow its documentation and may need `extraArgs`), anything run on Windows beyond what CI covers (the Windows installer and
+  self-update are only smoke-tested in CI), the nvm wrapper, and any real AngularJS/Angular/React app. Those are exactly what your first run will show.
+
+## Updates
+
+chip-chop reads the GitHub releases of this repository. Two channels:
+
+- `stable` (default): final releases only; release candidates (`-rc.N`) are ignored.
+- `all`: the newest version wins, whether it is a release candidate or a final release.
+
+```bash
+chip-chop update channel all      # or: stable
+chip-chop update --check          # exit code 10 when an update exists
+chip-chop update                  # downloads the bundle for your OS and runs its installer
+```
+
+The local app has the same controls in the *Project* tab. The choice is stored in `~/.chipchop/settings.json`
+(`%USERPROFILE%\.chipchop` on Windows). A release candidate is any version with a suffix, such as `0.2.0-rc.1`;
+the release workflow marks it as a pre-release on GitHub automatically. Updating needs network access to
+`api.github.com`; it has not been exercised against a real newer release yet (only the version logic is unit-tested).

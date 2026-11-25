@@ -1,7 +1,7 @@
 name: Release
 
-# Creates a GitHub Release (tag vX.Y.Z + installable tarball) when `main` contains a
-# package version that has no release yet. Also runnable by hand from the Actions tab.
+# Creates a GitHub Release (tag vX.Y.Z) with installable bundles for Linux and Windows when `main`
+# has a package version without a release. Also runnable by hand from the Actions tab.
 # Publishing to npm is separate and manual (see docs/RELEASING.md).
 on:
   push:
@@ -9,29 +9,33 @@ on:
     paths:
       - packages/core/package.json
       - .github/workflows/release.yml
+      - scripts/**
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
+      needed: ${{ steps.ver.outputs.needed }}
     steps:
       - uses: actions/checkout@v4
-      - name: Decide whether this version needs a release
-        id: ver
+      - id: ver
+        name: Decide whether this version needs a release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="v$(node -p "require('./packages/core/package.json').version")"
           echo "tag=$V" >> "$GITHUB_OUTPUT"
-          if gh release view "$V" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.ver.outputs.exists == 'false'
+          if gh release view "$V" >/dev/null 2>&1; then echo "needed=false" >> "$GITHUB_OUTPUT"; else echo "needed=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.ver.outputs.needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - if: steps.ver.outputs.exists == 'false'
+      - if: steps.ver.outputs.needed == 'true'
         run: |
           npm install
           npm run validate:schemas
@@ -39,9 +43,57 @@ jobs:
           npm test
           npx playwright install --with-deps chromium
           npm run test:e2e --workspace chip-chop
-          npm pack --workspace chip-chop
+          bash scripts/make-bundle.sh
+      - name: Smoke-test the Linux bundle
+        if: steps.ver.outputs.needed == 'true'
+        run: |
+          export HOME="$(mktemp -d)"
+          tar xzf chip-chop-*-linux.tar.gz
+          CHIPCHOP_SKIP_BROWSER=1 ./chip-chop-*-linux/install.sh
+          "$HOME/.local/bin/chip-chop" --version
+          "$HOME/.local/bin/chip-chop" help | head -3
+      - if: steps.ver.outputs.needed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles
+          path: |
+            chip-chop-*-linux.tar.gz
+            chip-chop-*-windows.zip
+            chip-chop-*.tgz
+
+  smoke-windows:
+    needs: build
+    if: needs.build.outputs.needed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - shell: pwsh
+        run: |
+          Expand-Archive chip-chop-*-windows.zip -DestinationPath .
+          $env:CHIPCHOP_SKIP_BROWSER = "1"; $env:CHIPCHOP_SKIP_PATH = "1"
+          $env:CHIPCHOP_PREFIX = Join-Path $env:RUNNER_TEMP "cc"
+          & (Get-ChildItem -Directory chip-chop-*-windows | Select-Object -First 1).FullName\install.ps1
+          & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" --version
+          & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" help
+
+  publish:
+    needs: [build, smoke-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
       - name: Create GitHub Release
-        if: steps.ver.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.ver.outputs.tag }}" chip-chop-*.tgz --target "$GITHUB_SHA" --title "chip-chop ${{ steps.ver.outputs.tag }}" --generate-notes
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="${{ needs.build.outputs.tag }}"
+          PRE=""
+          case "$TAG" in *-*) PRE="--prerelease";; esac   # v0.2.0-rc.1 is a release candidate
+          gh release create "$TAG" chip-chop-*-linux.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --target "$GITHUB_SHA" --title "chip-chop $TAG" --generate-notes $PRE

@@ -11,6 +11,7 @@ import { initProject } from "./init.js";
 import { packageRoot } from "./paths.js";
 import { runCapture, runCompare } from "./pipeline.js";
 import { startUi } from "./server.js";
+import { checkForUpdate, getChannel, installUpdate, setChannel, type Channel } from "./updater.js";
 import type { StageName } from "./types.js";
 import { formatIssues, validateCatalogDir } from "./validate.js";
 import { readStructured } from "./fsutil.js";
@@ -26,6 +27,7 @@ const COMMANDS: Record<string, string> = {
   ai: "ai run [stages] | ai test <provider> [--model m] | ai show   (uses your Claude/Copilot CLI)",
   ui: "Open the local app in your browser",
   doctor: "Check node, git, Chromium and the AI CLIs",
+  update: "update [--check] | update channel [stable|all]   (GitHub releases and release candidates)",
 };
 
 function version(): string {
@@ -52,6 +54,7 @@ function help(): string {
     "  --framework angularjs|angular|react|other   init   --force   init: overwrite",
     "  --dry-run             ai run: print the commands without running them",
     "  --no-open             ui: do not open the browser   --port <n>",
+    "  --check / --channel stable|all   update: only look / pick the channel for this run",
   ].join("\n");
 }
 
@@ -75,7 +78,7 @@ function parse(argv: string[]): Parsed {
 }
 
 function openBrowser(url: string): void {
-  const [cmd, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+  const [cmd, args] = process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
   execFile(cmd as string, args as string[], () => {});
 }
 
@@ -200,6 +203,26 @@ async function main(): Promise<number> {
       if (!o["no-open"]) openBrowser(ui.url);
       await new Promise<void>((r) => process.on("SIGINT", () => r()));
       await ui.close();
+      return 0;
+    }
+    case "update": {
+      if (sub === "channel") {
+        const c = pos[2];
+        if (c === "stable" || c === "all") setChannel(c);
+        else if (c) {
+          console.error("channel must be `stable` (final releases only) or `all` (newest, release candidates included)");
+          return 2;
+        }
+        console.log(`update channel: ${getChannel()}`);
+        return 0;
+      }
+      const ch = str("channel") as Channel | undefined;
+      if (o.check) {
+        const i = await checkForUpdate(ch ? { channel: ch } : {});
+        console.log(i.available ? `update available: ${i.current} -> ${i.latest}${i.prerelease ? " (release candidate)" : ""}\n${i.url}${i.note ? `\n${i.note}` : ""}` : `up to date (${i.current}, channel ${i.channel})${i.note ? `: ${i.note}` : ""}`);
+        return i.available ? 10 : 0;
+      }
+      await installUpdate({ ...(ch ? { channel: ch } : {}), log });
       return 0;
     }
     case "doctor": {

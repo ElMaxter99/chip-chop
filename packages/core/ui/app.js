@@ -43,6 +43,21 @@
       c.appendChild(v);
       v.querySelector("#val").onclick = function () { api("/api/validate", "POST").then(function (r) { var o = v.querySelector("#valout"); o.hidden = false; o.textContent = r.text || "No problems found."; }); };
     }
+    var up = el('<div class="card"><h2>Updates</h2><div class="row"><label>Channel <select id="chan"><option value="stable">Stable releases only</option><option value="all">All (newest, incl. release candidates)</option></select></label><button id="chk">Check for updates</button><button id="upd" class="primary" hidden>Install update</button></div><div id="upout" class="mut"></div></div>');
+    c.appendChild(up);
+    function checkUpdate() {
+      up.querySelector("#upout").textContent = "checking…";
+      api("/api/update").then(function (i) {
+        up.querySelector("#chan").value = i.channel;
+        var out = up.querySelector("#upout"), btn = up.querySelector("#upd");
+        btn.hidden = !i.available || !!i.note;
+        out.textContent = i.error ? "Could not check: " + i.error : i.available ? "Version " + i.latest + (i.prerelease ? " (release candidate)" : "") + " is available. You have " + i.current + "." + (i.note ? " " + i.note : "") : "Up to date (" + i.current + ").";
+      });
+    }
+    up.querySelector("#chk").onclick = checkUpdate;
+    up.querySelector("#chan").onchange = function () { api("/api/update/channel", "POST", { channel: this.value }).then(checkUpdate); };
+    up.querySelector("#upd").onclick = function () { start("/api/update/install", {}, this); };
+    checkUpdate();
     var dr = el('<div class="card"><div class="row"><button id="doc">Check environment</button></div><div id="docout"></div></div>');
     c.appendChild(dr);
     dr.querySelector("#doc").onclick = function () {

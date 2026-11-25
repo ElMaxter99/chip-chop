@@ -121,11 +121,14 @@ async function waitForUrl(url: string, timeoutMs: number, child?: ChildProcess):
   child?.once("exit", (code) => (exited = code));
   while (Date.now() < deadline) {
     if (exited !== undefined) throw new Error(`server exited early (code ${String(exited)}) before ${url} answered`);
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-      if (res.status < 500) return;
-    } catch {
-      /* not up yet */
+    // On Windows "localhost" can resolve to ::1 while the dev server listens on IPv4 only (or the reverse).
+    for (const candidate of new Set([url, url.replace("//localhost", "//127.0.0.1")])) {
+      try {
+        const res = await fetch(candidate, { signal: AbortSignal.timeout(3000) });
+        if (res.status < 500) return;
+      } catch {
+        /* not up yet */
+      }
     }
     await new Promise((r) => setTimeout(r, 400));
   }

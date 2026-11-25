@@ -13,6 +13,7 @@ import { chipDir, uiDir } from "./paths.js";
 import type { StageName } from "./types.js";
 import { formatIssues, validateCatalogDir } from "./validate.js";
 import { stringify } from "yaml";
+import { checkForUpdate, getChannel, installUpdate, setChannel } from "./updater.js";
 
 interface Job {
   id: string;
@@ -115,6 +116,19 @@ export async function startUi(appDir: string, port = 0): Promise<UiServer> {
       if (u.pathname === "/api/validate" && req.method === "POST") {
         const issues = validateCatalogDir(appDir);
         return void send(res, 200, { issues, text: formatIssues(issues) });
+      }
+      if (u.pathname === "/api/update" && req.method === "GET") {
+        return void send(res, 200, await checkForUpdate().catch((e: Error) => ({ error: e.message, channel: getChannel(), available: false })));
+      }
+      if (u.pathname === "/api/update/channel" && req.method === "POST") {
+        const b = await body(req);
+        if (b.channel !== "stable" && b.channel !== "all") return void send(res, 400, { error: "channel must be stable or all" });
+        setChannel(b.channel);
+        return void send(res, 200, { channel: b.channel });
+      }
+      if (u.pathname === "/api/update/install" && req.method === "POST") {
+        const job = start("update", (log) => installUpdate({ log }));
+        return void send(res, 200, { job: job.id });
       }
       if (u.pathname === "/api/doctor" && req.method === "GET") return void send(res, 200, await doctor(appDir));
       if (u.pathname === "/api/ai" && req.method === "GET") return void send(res, 200, loadAiConfig(appDir));
