@@ -42,6 +42,7 @@ jobs:
           npm run validate:schemas
           npm run typecheck
           npm test
+          npm run docs:check -- --strict
           npx playwright install --with-deps chromium
           npm install --prefix examples/angularjs-demo --no-audit --no-fund
           npm run test:e2e --workspace chip-chop

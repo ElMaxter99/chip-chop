@@ -1,92 +1,168 @@
-<p align="center"><img src="docs/assets/logo.svg" width="96" alt="chip-chop logo: an acorn split in two"></p>
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="chip-chop" width="96">
+</p>
 
 # chip-chop
 
-Capture every UI state of a web app on two git refs and compare them: pixels,
-accessibility tree, network requests and the flow graph between screens.
+**Captura cada pantalla de tu app web en dos versiones de git y dime qué ha cambiado de verdad.**
 
-> **Status: v0.1 (early).** The engine, the CLI and the local app work end to end
-> on the bundled demo app (see [what is tested](docs/USAGE.md#what-has-been-tested)).
-> It has not yet been run on a large real-world app. Expect rough edges and
-> [please report them](https://github.com/ElMaxter99/chip-chop/issues).
+chip-chop construye tu app en dos ramas (por ejemplo `develop` y `restyle-nuevo`), recorre **todos sus estados** (páginas, modales, pestañas, errores…) con un navegador real y compara píxeles, árbol de accesibilidad, peticiones, errores de consola y el grafo de flujos. Una IA (Claude CLI, Copilot CLI u otra) lee tu código y prepara el catálogo de estados; después todo es determinista y no necesita backend.
 
-## Quick start
+Funciona con **cualquier app web** (AngularJS, Angular, React…): el framework solo importa para que la IA lea tu código.
+
+- [Para qué sirve](#para-qué-sirve)
+- [Instalar](#instalar)
+- [El flujo en un vistazo](#el-flujo-en-un-vistazo)
+- [Guía paso a paso](#guía-paso-a-paso)
+- [La carpeta `.chipchop/`](#la-carpeta-chipchop)
+- [Línea de comandos](#línea-de-comandos)
+- [La app de escritorio](#la-app-de-escritorio)
+- [Actualizaciones y canales](#actualizaciones-y-canales)
+- [Preguntas frecuentes](#preguntas-frecuentes)
+- [Qué está probado y qué no](#qué-está-probado-y-qué-no)
+- [Desarrollo y releases](#desarrollo-y-releases)
+
+## Para qué sirve
+
+| Quiero… | Modo | Qué exige |
+|---|---|---|
+| **Rehacer el aspecto sin romper nada** | `restyle` | Los píxeles pueden cambiar; el árbol ARIA, las peticiones y el grafo de pantallas **no**. |
+| **Auditar una rama que añade o quita pantallas** | `flow-audit` | Te dice qué estados se han añadido, quitado o cambiado, lado a lado y con diff. |
+| **Documentar una app** | cualquiera | El catálogo de estados y flujos es documentación viva de cada pantalla y recorrido. |
+
+## Instalar
+
+Descarga el instalable de tu sistema en la [última release](https://github.com/ElMaxter99/chip-chop/releases/latest):
+
+| Sistema | Archivo | Notas |
+|---|---|---|
+| Windows | `chip-chop-*-win-x64.exe` | Instalador. SmartScreen avisará: no está firmado. |
+| macOS | `chip-chop-*-mac-arm64.dmg` / `-x64.dmg` | **Nunca probado en un Mac real.** Gatekeeper avisará: no está firmado. |
+| Linux | `.AppImage`, `.deb`, `.rpm` | El AppImage se actualiza solo; `.deb`/`.rpm` abren la página de descargas. |
+| Terminal (sin ventana) | `chip-chop-*-linux.tar.gz`, `-windows.zip`, `-macos.tar.gz` | Trae `install.sh` / `install.ps1`; da el comando `chip-chop`. |
+
+Necesitas **git** y **Node 22 o superior** en el PATH para la línea de comandos. La app de escritorio ya trae lo que necesita y descarga Chromium la primera vez (se muestra el progreso en la pantalla de Inicio).
+
+Para que la IA prepare el catálogo necesitas **una** de estas herramientas con sesión iniciada:
 
 ```bash
-# Linux: download chip-chop-<version>-linux.tar.gz from the GitHub Release, then
-tar xzf chip-chop-*-linux.tar.gz && ./chip-chop-*-linux/install.sh   # needs Node 22+ and git
-# Windows: unzip chip-chop-<version>-windows.zip, then in PowerShell:
-#   powershell -ExecutionPolicy Bypass -File .\chip-chop-<version>-windows\install.ps1
-# macOS (untested): chip-chop-<version>-macos.tar.gz, same steps as Linux
-cd your-app
-chip-chop doctor                            # node, git, Chromium, Claude/Copilot CLIs
-chip-chop init --framework angularjs
-chip-chop ui                                # local app in your browser (Spanish UI)
-# or from the terminal:
-chip-chop ai run                            # your AI CLI writes states, flows and mocks
-chip-chop compare --base develop --head my-branch
+# Claude Code
+curl -fsSL https://claude.ai/install.sh | bash          # Windows: irm https://claude.ai/install.ps1 | iex
+# GitHub Copilot CLI
+npm install -g @github/copilot                          # Windows: winget install GitHub.Copilot
 ```
 
-Full walkthrough: [docs/USAGE.md](docs/USAGE.md).
+Comprueba que todo está bien con `chip-chop doctor` (o en **Ajustes** de la app).
 
-## What it is for
-
-- **Restyle without breaking anything.** You are rewriting the look of an app
-  but must not change behavior. Run chip-chop on `develop` and on your branch:
-  pixels may change, but the accessibility tree, the requests and the screen
-  graph must not.
-- **Audit new flows.** A branch adds two modals and a screen in the middle of a
-  flow. chip-chop shows which states were added, removed or changed, side by
-  side, with a diff.
-- **Document an app.** The state catalog and flows double as living
-  documentation of every screen and journey.
-
-It works on **any web app**, because it drives a real browser (Playwright). The
-framework only matters when an AI reads your source code to prepare the audit,
-and there are guides for **AngularJS, Angular and React**.
-
-## How it works
+## El flujo en un vistazo
 
 ```
-read source ─▶ catalog ─▶ capture (ref A) ─┐
- (AI + guide)  states,     replay mocks,     ├─▶ compare ─▶ report
-               flows,      PNG + ARIA +      │   pixelmatch   HTML + JSON
-               mocks       requests          │   ARIA/requests  + Markdown
-                           capture (ref B) ──┘   flow graph
+ leer el código ─▶ catálogo ─▶ capturar (rama A) ─┐
+  (IA + guía)      estados,     mocks, PNG, ARIA,  ├─▶ comparar ─▶ informe
+                   flujos,      peticiones         │   píxeles       HTML + JSON
+                   mocks      capturar (rama B) ───┘   ARIA/peticiones + Markdown
+                                                      grafo de flujos
 ```
 
-1. **An AI reads your source code** (Claude, Copilot or any agent) using the
-   guides in [`packages/skills`](packages/skills) and writes a `.chipchop/`
-   folder inside your app.
-2. **The engine validates** those files against the JSON Schemas in
-   [`packages/schemas`](packages/schemas), so malformed output is rejected.
-3. **Capture** builds and serves each git ref, answers every API call from the
-   mocks (no backend needed, login included), freezes time and animations, and
-   saves a screenshot, an ARIA snapshot and the request log for each state.
-4. **Compare** pairs states by id, runs the pixel diff, compares the
-   non-visual signals, and diffs the state graph.
+1. **Preparar**: la IA lee tu código y escribe `.chipchop/` dentro de tu app (estados, flujos, mocks).
+2. **Validar**: el motor comprueba esos ficheros contra los JSON Schema; lo mal formado se rechaza.
+3. **Capturar**: se compila y sirve cada rama aparte (tu carpeta de trabajo no se toca), cada llamada a la API se responde con los mocks (sin backend, login incluido), se congelan el reloj y las animaciones y se guarda captura, ARIA y peticiones de cada estado.
+4. **Comparar**: los estados se emparejan por `id` (`passwords-delete-modal` en una rama contra el mismo `id` en la otra); una pantalla nueva es un `id` nuevo.
+5. **Revisar**: informe HTML con filtros, diff de píxeles y cambios de flujo.
 
-Ids are the join key: `passwords-delete-modal` on one ref is compared with the
-same id on the other. A feature that adds a screen adds a new id.
+## Guía paso a paso
 
-## The `.chipchop/` folder
+### 0. Abre la app
 
-Lives inside the audited app and is versioned with it.
+Al abrir la app de escritorio ves **Inicio**: tus proyectos, el uso de IA y los ajustes. Al principio está vacío; **Añadir proyecto…** (o arrastra una carpeta encima, o pásala como argumento al ejecutable de la app).
+
+![Inicio vacío](docs/screenshots/home-vacio.png)
+
+Cada proyecto es la carpeta de una app web. La lista muestra si está configurado, cuándo lo abriste y el resultado de su último informe.
+
+![Inicio con proyectos](docs/screenshots/home-proyectos.png)
+
+### 1. Inicializa el proyecto
+
+En un proyecto *sin inicializar* pulsa **Inicializar** (o ejecuta `chip-chop init` en la carpeta). Crea `.chipchop/` con `config.yaml`, un catálogo inicial y las guías para la IA. No toca el código de tu app ni pisa nada que ya exista. Detecta el framework; puedes forzarlo con `--framework angularjs|angular|react|other`.
+
+Abre `.chipchop/config.yaml` y revisa **cómo se compila y se sirve tu app** (comando de build, directorio de salida o servidor, puerto, viewports). Es lo único que casi siempre hay que tocar a mano.
+
+### 2. Deja que la IA prepare el catálogo
+
+Pestaña **IA**: elige el proveedor y el modelo de cada etapa (descubrir estados, flujos, mocks, reparar). Puedes mezclar, p. ej. un modelo potente para descubrir y uno barato para los flujos.
+
+![IA en la app local](docs/screenshots/ui-ia.png)
+
+Por terminal: `chip-chop ai test claude` comprueba que el CLI responde y `chip-chop ai run` ejecuta las etapas. Con `--dry-run` imprime los comandos sin ejecutarlos. La configuración global vive en `~/.chipchop/ai.yaml` y cada proyecto puede sobrescribirla con su `.chipchop/ai.yaml`.
+
+Después ejecuta `chip-chop validate`: comprueba configuración, estados, flujos y mocks entre sí. Es barato; úsalo siempre que edites algo a mano.
+
+### 3. Revisa el estado del proyecto
+
+La pestaña **Proyecto** («Preparar la app») son tres pasos que puedes repetir cuando cambie el código —crear `.chipchop`, generar con IA y validar— y, debajo, el **entorno** (node, git, Chromium y los CLI de IA).
+
+![Proyecto en la app local](docs/screenshots/ui-proyecto.png)
+
+### 4. Compara dos ramas
+
+Pestaña **Comparar**: elige **Base** y **Cabeza** y el modo (`restyle` o `auditar flujos`). Se compila cada rama en un directorio temporal; tu carpeta de trabajo no cambia.
+
+![Comparar](docs/screenshots/ui-comparar.png)
+
+Equivale a:
+
+```bash
+chip-chop compare --base develop --head restyle-nuevo --mode restyle
+```
+
+Si ya capturaste, `--reuse` salta la captura. `capture` captura una sola rama (`--ref`, `--label`, `--only a,b`, `--viewport mobile`).
+
+### 5. Lee el informe
+
+Cada comparación deja un informe HTML (más JSON y Markdown) en `.chipchop/reports/`. Se abre desde la pestaña **Informes**; `chip-chop report` lo vuelve a generar a partir de una comparación existente.
+
+![Informe](docs/screenshots/report.png)
+
+Cada estado sale con una etiqueta:
+
+| Etiqueta | Significa |
+|---|---|
+| **Identical** | Idéntico en píxeles, ARIA y peticiones. |
+| **Visual only** | Solo cambian los píxeles (lo esperado en un `restyle`). |
+| **Structural** | Cambia el árbol de accesibilidad, las peticiones o hay errores nuevos de consola. En `restyle` es lo que hay que investigar. |
+| **Added / Removed** | El estado solo existe en una rama (lo esperado en `flow-audit`). |
+| **Failed** | No se pudo capturar en alguna rama. |
+
+Abre **Compare** en cada estado para ver *Base*, *Head* y el *Diff*; arriba están los cambios de flujo (estados y transiciones nuevos).
+
+![Ejemplo de diff](docs/screenshots/diff-example.png)
+
+La página completa de ejemplo: [`docs/screenshots/report-full.png`](docs/screenshots/report-full.png).
+
+### 6. Repite
+
+Cambia el código, vuelve a comparar. Para ver el grafo de pantallas: `chip-chop graph` (Mermaid). Si la IA se equivocó en un flujo o un mock, edítalo a mano o relanza solo esa etapa con `chip-chop ai run flows`.
+
+## La carpeta `.chipchop/`
+
+Vive dentro de la app auditada y se versiona con ella.
 
 ```
 .chipchop/
-  config.yaml            build, serve, viewports, determinism, auth, external assets
-  states.yaml            every capturable state: pages, modals, drawers, tabs
-  flows/*.flow.yaml      user journeys, readable by humans, generated by AI
-  mocks/**/*.mock.json   typed backend responses, one file per scenario
-  runs/  reports/        generated output (git-ignored)
+  config.yaml            compilación, servidor, viewports, determinismo, auth, assets externos
+  states.yaml            cada estado capturable: páginas, modales, paneles, pestañas
+  flows/*.flow.yaml      recorridos de usuario, legibles y generados por la IA
+  mocks/**/*.mock.json   respuestas tipadas del backend, un fichero por escenario
+  ai.yaml                (opcional) proveedores y modelos de este proyecto
+  runs/  reports/        salida generada (ignorada por git)
 ```
 
-A flow reads like this:
+Un flujo se lee así:
 
 ```yaml
 id: passwords-delete
-title: Delete a password
+title: Borrar una contraseña
 mocks: [auth/login-ok, passwords/list-with-data]
 steps:
   - goto: /#!/passwords
@@ -96,49 +172,92 @@ steps:
   - press: Escape
 ```
 
-Mocks are inferred from the code (interfaces, DTOs, Zod schemas, existing test
-fixtures), carry a `responseSchema`, and are validated against it, so an
-`isActive` that should be a boolean cannot silently become a string. Full
-examples are in [`packages/schemas/examples`](packages/schemas/examples).
+Los mocks se infieren del código (interfaces, DTO, esquemas Zod, fixtures de tests), llevan un `responseSchema` y se validan contra él: un `isActive` booleano no puede convertirse en texto sin que salte. Ejemplos completos en [`packages/schemas/examples`](packages/schemas/examples).
 
-## Repository layout
+En apps **AngularJS** chip-chop espera a que `$http` y `$browser` queden en reposo antes de capturar; en todas, congela animaciones y reloj para que dos capturas iguales den cero diferencias.
 
-| Path | Contents |
-|---|---|
-| `packages/core` | The installable `chip-chop` package: engine, CLI, AI providers, local server and UI |
-| `packages/schemas` | JSON Schemas for config, states, flows, mocks and reports, with examples |
-| `packages/skills` | `SKILL.md` and guides for AngularJS, Angular, React, states/flows and mocks |
-| `examples/static-demo` | Small app with two variants (restyle, new modal) used by the end-to-end tests |
-| `.github/workflows` | CI, release, and a reusable workflow to compare two refs in a PR |
+## Línea de comandos
 
-## Development
-
-```bash
-npm install
-npm run validate:schemas   # schemas, valid and invalid examples, cross-references
-npm run typecheck
-npm test
-npx playwright install chromium && npm run test:e2e --workspace chip-chop
+```
+chip-chop init        crea .chipchop/ en la app actual
+chip-chop validate    comprueba configuración, estados, flujos y mocks
+chip-chop capture     compila y sirve una referencia git y captura cada estado
+chip-chop compare     captura dos referencias y escribe el informe
+chip-chop report      vuelve a generar HTML/Markdown de una comparación existente
+chip-chop graph       imprime el grafo de flujos (Mermaid)
+chip-chop ai          ai run [etapas] | ai test <proveedor> | ai show
+chip-chop ui          abre la app local en el navegador
+chip-chop doctor      comprueba node, git, Chromium y los CLI de IA
+chip-chop update      update [--check] | update channel [stable|latest]
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Opciones comunes: `--dir <carpeta>`, `--base/--head <ref>`, `--mode restyle|flow-audit`, `--reuse`, `--only a,b`, `--viewport <nombre>`, `--no-install`, `--keep-worktree`. Guía completa: [docs/USAGE.md](docs/USAGE.md).
 
-## Related work
+## La app de escritorio
 
-chip-chop builds on ideas from other tools and does not replace them:
+Es la misma interfaz que `chip-chop ui`, con Inicio, gestor de proyectos y actualizaciones automáticas. Además:
 
-- Playwright's built-in `toHaveScreenshot()` (uses pixelmatch) for assertions
-  inside tests.
-- [Argos](https://argos-ci.com), [BackstopJS](https://github.com/garris/BackstopJS)
-  and [reg-suit](https://github.com/reg-viz/reg-suit) for visual review
-  workflows and baselines.
-- [flowshot](https://github.com/thingnoy/flowshot) for presenting screenshots
-  as user flows.
+- **Recuerda** tamaño y posición de la ventana.
+- **Avisa** con una notificación del sistema cuando termina una captura, comparación o tarea de IA si estabas en otra ventana.
+- **Arrastra** una carpeta sobre Inicio para añadirla, o ábrela desde el terminal pasándola como argumento.
+- **Pregunta** antes de cerrar si hay tareas en marcha.
+- Menú *Archivo ▸ Inicio* (`Ctrl/⌘+H`) y botón «‹ Inicio» dentro de cada proyecto.
 
-What chip-chop adds is the preparation layer (a state catalog, flows and typed
-mocks generated from source code by an AI) and the comparison between two git
-refs with a flow graph diff.
+Pestañas de Inicio: **Proyectos**, **IA** (qué proveedor y modelo usa cada etapa) y **Ajustes** (versión, canal de actualización, Chromium, comprobaciones).
 
-## License
+![IA en Inicio](docs/screenshots/home-ia.png)
+![Ajustes en Inicio](docs/screenshots/home-ajustes.png)
 
-[MIT](LICENSE)
+## Actualizaciones y canales
+
+La app avisa cuando hay una versión nueva y la instala sola en Windows y en el AppImage de Linux; en macOS, `.deb` y `.rpm` abre la página de descargas. Por terminal: `chip-chop update --check` y `chip-chop update`.
+
+| Canal | Qué recibes |
+|---|---|
+| `stable` («Solo estables») | Solo versiones finales. Es el predeterminado. |
+| `latest` («Últimas») | También las *release candidates* (`-rc.N`); la final gana siempre a su RC. |
+
+Cámbialo en **Ajustes** o con `chip-chop update channel latest`. Los borradores nunca cuentan.
+
+## Preguntas frecuentes
+
+**¿Necesito un backend?** No. Cada llamada a la API se responde con los mocks del catálogo, login incluido.
+
+**¿Toca mi código o mi carpeta de trabajo?** No. Cada rama se construye en un `git worktree` temporal; `init` solo crea `.chipchop/`.
+
+**¿Y si no uso IA?** Puedes escribir `states.yaml`, los flujos y los mocks a mano; la IA solo los genera más rápido. `validate` te ayuda a acertar.
+
+**¿Qué framework necesito?** Ninguno en concreto. Hay guías para AngularJS, Angular y React en [`packages/skills`](packages/skills).
+
+**Dos capturas iguales dan diferencias.** Mira si la app usa fuentes o imágenes externas (decláralas en `config.yaml`), reloj o animaciones propias, o datos aleatorios; `chip-chop doctor` y `docs/USAGE.md` lo detallan.
+
+**La app de escritorio no abre / no descarga Chromium.** Ejecuta `chip-chop doctor`; si estás tras un proxy, descarga Chromium por terminal con tu configuración de red.
+
+## Qué está probado y qué no
+
+Probado en CI (Linux y Windows): motor, CLI, interfaz, demos de AngularJS y estática, actualizador contra releases simuladas y arranque del paquete de escritorio.
+
+**Sin probar** (no lo des por hecho): macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
+
+## Desarrollo y releases
+
+| Ruta | Contenido |
+|---|---|
+| `packages/core` | El paquete `chip-chop`: motor, CLI, proveedores de IA, servidor local y UI |
+| `packages/schemas` | JSON Schemas de configuración, estados, flujos, mocks e informes, con ejemplos |
+| `packages/skills` | `SKILL.md` y guías para AngularJS, Angular, React, estados/flujos y mocks |
+| `desktop` | App de escritorio (Electron) e instaladores |
+| `examples` | Apps de demostración (estática, AngularJS, Angular, React) |
+| `docs` | [USAGE](docs/USAGE.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [ROADMAP](docs/ROADMAP.md), [RELEASING](docs/RELEASING.md) |
+
+```bash
+npm install && npm run build
+npm run typecheck && npm test && npm run test:scripts && npm run test:e2e --workspace chip-chop
+npm run docs:check          # enlaces, imágenes y capturas del README al día
+```
+
+Cada cambio de usuario lleva su fragmento en `changelog/unreleased/` (ver [changelog/README.md](changelog/README.md)). **Cada versión actualiza esta documentación**: el workflow *Docs screenshots* regenera `docs/screenshots/` con la interfaz real y `npm run docs:check -- --strict` bloquea la release si el README apunta a algo que no existe o las capturas se hicieron con otra interfaz. El procedimiento completo está en [docs/RELEASING.md](docs/RELEASING.md).
+
+Relacionado: [pdf-annotator](https://github.com/ElMaxter99/pdf-annotator), de donde se tomó el flujo de releases.
+
+Licencia [MIT](LICENSE).

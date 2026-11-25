@@ -15,14 +15,16 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "validate:schemas": "node scripts/validate-schemas.mjs",
-    "test:scripts": "node --test scripts/changelog.test.mjs desktop/update-logic.test.mjs scripts/merge-mac-feed.test.mjs",
+    "test:scripts": "node --test scripts/changelog.test.mjs desktop/update-logic.test.mjs scripts/merge-mac-feed.test.mjs scripts/docs.test.mjs",
     "changelog:check": "node scripts/changelog.mjs check",
     "changelog:preview": "node scripts/changelog.mjs preview",
     "changelog:release": "node scripts/changelog.mjs release",
     "release:notes": "node scripts/release-notes.mjs",
     "desktop:prepare": "node desktop/prepare-core.mjs",
     "desktop:pack": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && npx electron-builder --projectDir desktop --dir --publish never",
-    "desktop:dist": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && npx electron-builder --projectDir desktop --publish never"
+    "desktop:dist": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && npx electron-builder --projectDir desktop --publish never",
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:screenshots": "node scripts/docs-screenshots.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

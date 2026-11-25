@@ -29,6 +29,8 @@ jobs:
         run: npm test
       - name: Script tests (changelog)
         run: npm run test:scripts
+      - name: Docs (links, images, screenshots up to date)
+        run: npm run docs:check
 
   # Real browser, real pngjs/pixelmatch: builds a temp git repo from examples/static-demo
   # and runs restyle and flow-audit comparisons end to end.

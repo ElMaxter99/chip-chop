@@ -1,0 +1,38 @@
+name: Docs screenshots
+
+# Regenera docs/screenshots con la interfaz real (hace falta red para las fuentes).
+# Se lanza a mano desde Actions cuando cambia la interfaz; hace commit en main con [skip ci].
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-screenshots
+  cancel-in-progress: false
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci || npm install
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+        working-directory: packages/core
+      - run: node scripts/docs-screenshots.mjs
+      - name: Subir capturas
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then echo "Sin cambios en las capturas"; exit 0; fi
+          git commit -m "docs: regenera las capturas de la documentación [skip ci]"
+          git push origin main

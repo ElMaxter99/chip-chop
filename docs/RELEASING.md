@@ -17,6 +17,7 @@ Flujo copiado de [pdf-annotator](https://github.com/ElMaxter99/pdf-annotator) y 
 ## Parte B · Checklist para la IA
 
 - No lanzar *Release candidate* ni subir la versión final sin que el usuario lo pida expresamente para esa versión.
+- **Documentación al día en cada versión:** si cambió la interfaz (`packages/core/ui`, `desktop/home`) o un comando/flujo, revisa `README.md` y `docs/USAGE.md` (instalación, guía, tabla de canales, «qué está probado»), lanza el workflow **Docs screenshots** (Actions; hace commit en `main` con las capturas nuevas), haz `git pull` y comprueba `npm run docs:check`. `release.yml` ejecuta `docs:check -- --strict` y **falla** si hay enlaces rotos o las capturas son de otra interfaz.
 - Antes: `npm run validate:schemas && npm run typecheck && npm test && npm run test:scripts && npm run test:e2e --workspace chip-chop`.
 - `node scripts/release-notes.mjs X.Y.Z` debe mostrar las notas (no «no tiene sección»).
 - Qué hace cada workflow:

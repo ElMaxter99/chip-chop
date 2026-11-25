@@ -13,4 +13,5 @@ type: Added
 
 - `npm run changelog:check -- --base origin/main` · valida (el CI falla si una PR toca la app sin entrada).
 - `npm run changelog:preview` · cómo quedaría la próxima sección.
+- Si el cambio altera lo que ve el usuario (interfaz, comandos, instalación), actualiza también `README.md`/`docs/USAGE.md` y regenera las capturas (`npm run docs:screenshots` o el workflow *Docs screenshots*).
 - `npm run changelog:release -- X.Y.Z` · escribe la sección en `CHANGELOG.md` y borra los ficheros.
