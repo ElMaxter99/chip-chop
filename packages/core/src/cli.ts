@@ -84,7 +84,12 @@ function openBrowser(url: string): void {
 }
 
 async function main(): Promise<number> {
-  const { pos, o } = parse(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === "--version" || argv[0] === "-v") {
+    console.log(version());
+    return 0;
+  }
+  const { pos, o } = parse(argv);
   const [command, sub] = pos;
   if (!command || command === "help" || o.help || command === "--help") {
     console.log(help());
