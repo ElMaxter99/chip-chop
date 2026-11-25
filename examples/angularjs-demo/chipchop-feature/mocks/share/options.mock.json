@@ -1,0 +1,9 @@
+{
+  "id": "share/options",
+  "requests": [
+    {
+      "match": { "method": "GET", "url": "/api/share-options" },
+      "response": { "status": 200, "json": ["Ana", "Luis"] }
+    }
+  ]
+}

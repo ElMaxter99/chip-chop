@@ -8,7 +8,9 @@
  *   /api/**               anything, across segments
  *
  * Only the path is compared. The origin and the query string are ignored here
- * (query params are matched separately by `match.query`).
+ * (query params are matched separately by `match.query`). An origin written in the
+ * pattern is ignored too, so `https://api.example.com/v1/items` works the same as
+ * `/v1/items` (AngularJS apps often build absolute URLs from a `API_URL` constant).
  */
 export function matchUrl(pattern: string, requestUrl: string): boolean {
   const path = toPath(requestUrl);
@@ -26,6 +28,8 @@ function toPath(url: string): string {
 }
 
 function compile(pattern: string): RegExp {
+  const origin = /^[a-z][a-z0-9+.-]*:\/\/[^/]+/i.exec(pattern);
+  if (origin) pattern = pattern.slice(origin[0].length) || "/";
   let p = pattern.length > 1 && pattern.endsWith("/") ? pattern.slice(0, -1) : pattern;
   let out = "";
   for (let i = 0; i < p.length; i++) {

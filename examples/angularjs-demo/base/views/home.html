@@ -1,0 +1,7 @@
+<h2>Home</h2>
+<p ng-if="!vm.summary">Loading…</p>
+<ul class="stats" ng-if="vm.summary">
+  <li>Total: <b>{{ vm.summary.total }}</b></li>
+  <li>Active: <b>{{ vm.summary.active }}</b></li>
+  <li>Weak: <b>{{ vm.summary.weak }}</b></li>
+</ul>

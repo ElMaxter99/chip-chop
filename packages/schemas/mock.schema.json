@@ -51,7 +51,7 @@
             "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
             "url": {
               "type": "string",
-              "description": "Path glob without origin. Supports :param and * wildcards, e.g. /api/passwords/:id."
+              "description": "Path glob. Supports :param and * wildcards, e.g. /api/passwords/:id. Query string and origin are ignored (an origin written here is stripped)."
             },
             "query": {
               "type": "object",

@@ -1,0 +1,10 @@
+{
+  "name": "chip-chop-angularjs-demo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Small AngularJS 1.x app used to test chip-chop end to end. AngularJS comes from npm; build.mjs copies it into vendor/.",
+  "dependencies": {
+    "angular": "1.8.3",
+    "angular-route": "1.8.3"
+  }
+}

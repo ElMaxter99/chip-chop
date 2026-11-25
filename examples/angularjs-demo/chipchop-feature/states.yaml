@@ -1,0 +1,86 @@
+states:
+  - id: login
+    title: Login
+    kind: page
+    route: /#!/login
+    mask:
+      - { selector: ".clock" }
+
+  - id: home
+    title: Home
+    kind: page
+    route: /#!/home
+    mocks: [home/summary]
+    ready:
+      visible: { selector: ".stats" }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords
+    title: Password list
+    kind: page
+    route: /#!/passwords
+    mocks: [passwords/list-with-data]
+    ready:
+      visible: { role: table }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-empty
+    title: Password list, no data
+    kind: page
+    route: /#!/passwords
+    mocks: [passwords/list-empty]
+    ready:
+      visible: { selector: ".empty" }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-delete-modal
+    title: Delete confirmation
+    kind: modal
+    opensFrom: passwords
+    via:
+      - click: { role: button, name: "Delete" }
+    ready:
+      visible: { role: dialog }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-deleted
+    title: Password list after deleting one
+    kind: state
+    opensFrom: passwords
+    mocks: [passwords/delete]
+    via:
+      - click: { role: button, name: "Delete" }
+      - click: { role: button, name: "Confirm" }
+      - wait:
+          hidden: { role: dialog }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-share-modal
+    title: Share dialog
+    kind: modal
+    opensFrom: passwords
+    mocks: [share/options]
+    via:
+      - click: { role: button, name: "Share" }
+    ready:
+      visible: { role: dialog }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-share-sent
+    title: Password shared (toast)
+    kind: state
+    opensFrom: passwords-share-modal
+    mocks: [share/send]
+    via:
+      - select: { target: { role: combobox, name: "Recipient" }, option: "Luis" }
+      - click: { role: button, name: "Send" }
+      - wait:
+          visible: { role: status }
+    mask:
+      - { selector: ".clock" }

@@ -65,6 +65,20 @@ tab *Run* to start it). Review what the AI wrote: states, flows and mocks are pl
 Things to check by hand in `.chipchop/config.yaml` for an old AngularJS app: the build and serve commands,
 the Node version the build needs (`build.nodeVersion`), and the external image hosts.
 
+AngularJS notes (the reference is `examples/angularjs-demo`, run in CI):
+
+- Hash routes are written `/#!/login` (or `/#/login` without the `!` prefix). Going from one hash route to another
+  does not reload the page; chip-chop waits for AngularJS itself (`$http`, route templates and `$timeout` drained,
+  at most 5 s per wait) before a screenshot, so you do not need `networkIdleMs` tweaks for `ngRoute` / `ui-router` chains.
+  A page that polls with a long `$timeout` makes every wait last the full 5 s; prefer `$interval` for polling.
+- `templateUrl` files and other same-origin static XHR (`.html`, `/i18n/*.json`) are served by your app and are not
+  recorded as requests, so moving a template in a restyle is not a structural change. A same-origin JSON file that
+  is not under `assets/`, `static/`, `i18n/`, `locales/` or `lang/` is an API call and needs a mock (or `passthrough`).
+- Mock `match.url` is a path; a query string (`$http` `params`) and an origin are ignored, so `API_URL + "/items"` works.
+- Password inputs have no ARIA role: target them with `selector: "input[name=pass]"`. `ng-click` on a `<div>` or an
+  `<a>` without `href` has no button/link role either: use `selector` or `text`.
+- Animations are frozen from the first paint (not only before the screenshot), so `ngAnimate` modals finish at once.
+
 ## The local app
 
 `chip-chop ui` opens the app in your browser (it only listens on 127.0.0.1 and needs the link it prints).
@@ -108,7 +122,7 @@ Honest list, as of v0.1:
   validation, mock matching, AI argument building and the repair loop (with a fake CLI).
 - **Not tested here:** the Claude CLI end to end (it was not signed in where this was built), the Copilot CLI
   (not installed; its flags follow its documentation and may need `extraArgs`), anything run on Windows beyond what CI covers (the Windows installer and
-  self-update are only smoke-tested in CI), the nvm wrapper, and any real AngularJS/Angular/React app. Those are exactly what your first run will show.
+  self-update are only smoke-tested in CI), the nvm wrapper, and any real Angular/React app. An AngularJS 1.8 demo (`examples/angularjs-demo`: ngRoute with `#!` URLs, `$http` mocks, a form, modals) runs in CI next to the static one; it is a small app, not a real-world one. Those are exactly what your first run will show.
 
 ## Updates
 

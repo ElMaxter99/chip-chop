@@ -9,6 +9,7 @@ import {
   type Request,
   type Route,
 } from "playwright";
+import { angularJsStableInPage } from "./angularjs.js";
 import { downloadCached, matchGlob, placeholderPng, placeholderSize } from "./assets.js";
 import type { Catalog } from "./catalog.js";
 import { ensureDir, writeJson, writeText } from "./fsutil.js";
@@ -114,6 +115,19 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   };
+  // Installed in every page from the start, not only right before the screenshot: libraries that wait for
+  // transitionend/animationend (ngAnimate, UI Bootstrap modals) then finish at once instead of mid-way.
+  const freezeAnimationsScript = (): void => {
+    const add = (): void => {
+      if (document.getElementById("__chipchop_style")) return;
+      const style = document.createElement("style");
+      style.id = "__chipchop_style";
+      style.textContent = "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}";
+      (document.head ?? document.documentElement).appendChild(style);
+    };
+    if (document.documentElement) add();
+    document.addEventListener("DOMContentLoaded", add);
+  };
   const storageScript = (s: { local: Record<string, string>; session: Record<string, string> }): void => {
     try {
       for (const [k, v] of Object.entries(s.local)) localStorage.setItem(k, v);
@@ -162,6 +176,7 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
     });
     await context.clock.setFixedTime(new Date(config.determinism.fixedTime));
     await context.addInitScript(seedScript, config.determinism.randomSeed);
+    if (config.determinism.disableAnimations) await context.addInitScript(freezeAnimationsScript);
     const storage = config.auth?.storage;
     if (storage?.localStorage || storage?.sessionStorage) {
       await context.addInitScript(storageScript, { local: storage.localStorage ?? {}, session: storage.sessionStorage ?? {} });
@@ -181,7 +196,13 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
     page.on("request", (req) => {
       session.inflight++;
       const t = req.resourceType();
-      if (t === "xhr" || t === "fetch") session.requests.add(`${req.method()} ${new URL(req.url()).pathname}`);
+      if (t === "xhr" || t === "fetch") {
+        const u = new URL(req.url());
+        // Same-origin static files fetched by XHR (AngularJS templateUrl, i18n JSON) are not API calls:
+        // moving a template in a restyle must not look like a structural change.
+        if (u.origin === appOrigin && isStaticPath(u.pathname, config.passthrough)) return;
+        session.requests.add(`${req.method()} ${u.pathname}`);
+      }
     });
     page.on("requestfinished", () => void (session.inflight = Math.max(0, session.inflight - 1)));
     page.on("requestfailed", () => void (session.inflight = Math.max(0, session.inflight - 1)));
@@ -248,9 +269,15 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
     }
   }
 
+  /** AngularJS pages: wait for $http / templates / $timeout to drain (no-op for any other page). */
+  async function waitAngularJs(s: Session): Promise<void> {
+    await s.page.evaluate(angularJsStableInPage, 5000).catch(() => {});
+  }
+
   async function waitReady(s: Session, state?: State): Promise<void> {
     await s.page.waitForLoadState("load").catch(() => {});
     await waitIdle(s, state?.ready?.networkIdleMs ?? config.ready.networkIdleMs);
+    await waitAngularJs(s);
     if (state?.ready?.visible) {
       await resolveTarget(s.page, state.ready.visible).waitFor({ state: "visible", timeout: 15000 });
     }
@@ -274,7 +301,10 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
       if (step.wait.hidden) await resolveTarget(s.page, step.wait.hidden).waitFor({ state: "hidden", timeout: 15000 });
       if (step.wait.networkIdleMs !== undefined) await waitIdle(s, step.wait.networkIdleMs);
     }
-    if (!("capture" in step)) await waitIdle(s, Math.min(300, config.ready.networkIdleMs));
+    if (!("capture" in step)) {
+      await waitIdle(s, Math.min(300, config.ready.networkIdleMs));
+      await waitAngularJs(s);
+    }
   }
 
   async function takeCapture(s: Session, state: State): Promise<void> {
