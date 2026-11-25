@@ -1,6 +1,6 @@
 name: Release
 
-# Creates a GitHub Release (tag vX.Y.Z) with installable bundles for Linux and Windows when `main`
+# Creates a GitHub Release (tag vX.Y.Z) with installable bundles for Linux, Windows and macOS (macOS untested on a real Mac) when `main`
 # has a package version without a release. Also runnable by hand from the Actions tab.
 # Publishing to npm is separate and manual (see docs/RELEASING.md).
 on:
@@ -58,6 +58,7 @@ jobs:
           name: bundles
           path: |
             chip-chop-*-linux.tar.gz
+            chip-chop-*-macos.tar.gz
             chip-chop-*-windows.zip
             chip-chop-*.tgz
 
@@ -82,10 +83,33 @@ jobs:
           & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" --version
           & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" help
 
+  # macOS: informativo. Nadie ha probado chip-chop en un Mac real; este job solo comprueba que el paquete se instala
+  # y arranca en el runner. Si falla, no bloquea la publicación (se avisa en las notas de la release).
+  smoke-macos:
+    needs: build
+    if: needs.build.outputs.needed == 'true'
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          export HOME="$(mktemp -d)"
+          tar xzf chip-chop-*-macos.tar.gz
+          CHIPCHOP_SKIP_BROWSER=1 ./chip-chop-*-macos/install.sh
+          "$HOME/.local/bin/chip-chop" --version
+          "$HOME/.local/bin/chip-chop" help | head -3
+
   publish:
-    needs: [build, smoke-windows]
+    needs: [build, smoke-windows, smoke-macos]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.smoke-windows.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: bundles
@@ -97,4 +121,12 @@ jobs:
           TAG="${{ needs.build.outputs.tag }}"
           PRE=""
           case "$TAG" in *-*) PRE="--prerelease";; esac   # v0.2.0-rc.1 is a release candidate
-          gh release create "$TAG" chip-chop-*-linux.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --target "$GITHUB_SHA" --title "chip-chop $TAG" --generate-notes $PRE
+          # Notas: la sección del CHANGELOG; si no existe, las que genera GitHub.
+          if node scripts/release-notes.mjs "${TAG#v}" --out notes.md; then NOTES="--notes-file notes.md"; else NOTES="--generate-notes"; fi
+          if [ "${{ needs.smoke-macos.result }}" != "success" ]; then
+            printf '\n> El paquete de macOS no pasó la comprobación automática (o no se ha validado nunca en un Mac real).\n' >> notes.md 2>/dev/null || true
+          fi
+          # Borrador primero, con todos los archivos; se publica al final (publicar es lo que activa el aviso de actualización).
+          gh release create "$TAG" chip-chop-*-linux.tar.gz chip-chop-*-macos.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --draft --target "$GITHUB_SHA" --title "chip-chop $TAG" $NOTES $PRE
+          gh release edit "$TAG" --draft=false --tag "$TAG"
+          test "$(gh release view "$TAG" --json tagName,isDraft --jq '.tagName + " " + (.isDraft|tostring)')" = "$TAG false"

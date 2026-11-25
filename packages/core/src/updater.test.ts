@@ -7,7 +7,7 @@ const rel = (tag: string, pre = false, draft = false): Release => ({
   prerelease: pre,
   draft,
   html_url: `https://example.test/${tag}`,
-  assets: [{ name: `chip-chop-${tag.slice(1)}-linux.tar.gz`, browser_download_url: "u1" }, { name: `chip-chop-${tag.slice(1)}-windows.zip`, browser_download_url: "u2" }],
+  assets: [{ name: `chip-chop-${tag.slice(1)}-linux.tar.gz`, browser_download_url: "u1" }, { name: `chip-chop-${tag.slice(1)}-windows.zip`, browser_download_url: "u2" }, { name: `chip-chop-${tag.slice(1)}-macos.tar.gz`, browser_download_url: "u3" }],
 });
 
 test("semver precedence incl. release candidates", () => {
@@ -25,13 +25,13 @@ test("stable channel ignores release candidates and drafts", () => {
 });
 
 test("all channel takes the newest, release candidate or final", () => {
-  assert.equal(pickRelease(all, "all")?.tag_name, "v0.2.0-rc.1");
-  assert.equal(pickRelease([...all, rel("v0.2.0")], "all")?.tag_name, "v0.2.0");
+  assert.equal(pickRelease(all, "latest")?.tag_name, "v0.2.0-rc.1");
+  assert.equal(pickRelease([...all, rel("v0.2.0")], "latest")?.tag_name, "v0.2.0");
   assert.equal(pickRelease([...all, rel("v0.2.0")], "stable")?.tag_name, "v0.2.0");
 });
 
 test("checkForUpdate: available, current and per-platform asset", async () => {
-  const a = await checkForUpdate({ channel: "all", current: "0.1.1", releases: all, platform: "win32" });
+  const a = await checkForUpdate({ channel: "latest", current: "0.1.1", releases: all, platform: "win32" });
   assert.equal(a.available, true);
   assert.equal(a.prerelease, true);
   assert.equal(a.asset, "chip-chop-0.2.0-rc.1-windows.zip");
@@ -39,5 +39,10 @@ test("checkForUpdate: available, current and per-platform asset", async () => {
   assert.equal(s.available, false);
   const rc = await checkForUpdate({ channel: "stable", current: "0.2.0-rc.1", releases: [rel("v0.2.0")] });
   assert.equal(rc.available, true);
-  assert.equal(platformAsset(rel("v1.0.0"), "darwin"), undefined);
+  assert.equal(platformAsset(rel("v1.0.0"), "freebsd"), undefined);
+});
+
+test("macOS picks the -macos.tar.gz asset (sin validar en un Mac real)", async () => {
+  const r = await checkForUpdate({ channel: "stable", current: "0.1.1", releases: [rel("v0.2.0")], platform: "darwin" });
+  assert.equal(r.asset, "chip-chop-0.2.0-macos.tar.gz");
 });

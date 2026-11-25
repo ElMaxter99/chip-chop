@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { packageRoot } from "./paths.js";
 
 export const REPO = "ElMaxter99/chip-chop";
-export type Channel = "stable" | "all";
+/** stable = «Solo estables»; latest = «Últimas» (la más reciente, sea candidata -rc.N o final). */
+export type Channel = "stable" | "latest";
+export const normalizeChannel = (v: unknown): Channel => (v === "latest" || v === "all" || v === "beta" ? "latest" : "stable");
 
 export interface Release {
   tag_name: string;
@@ -51,14 +53,22 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** stable: only final releases. all: the highest version, release candidate or final. Drafts never count. */
+/**
+ * stable: solo versiones finales. latest: además las candidatas «X.Y.Z-rc.N»; entre todas gana la mayor, y la final
+ * de X.Y.Z gana a sus RC. Los borradores nunca cuentan; otros sufijos (beta, alpha…) se ignoran.
+ */
 export function pickRelease(releases: Release[], channel: Channel): Release | undefined {
-  const ok = releases.filter((r) => !r.draft && parseSemver(r.tag_name) && (channel === "all" || (!r.prerelease && !parseSemver(r.tag_name)!.pre.length)));
+  const ok = releases.filter((r) => {
+    const v = parseSemver(r.tag_name);
+    if (r.draft || !v) return false;
+    if (!v.pre.length) return true;
+    return channel === "latest" && /^rc$/.test(String(v.pre[0])) && v.pre.length === 2 && typeof v.pre[1] === "number";
+  });
   return ok.sort((a, b) => compareVersions(b.tag_name, a.tag_name))[0];
 }
 
 export function platformAsset(release: Release, platform: NodeJS.Platform = process.platform): { name: string; browser_download_url: string } | undefined {
-  const suffix = platform === "win32" ? "-windows.zip" : platform === "linux" ? "-linux.tar.gz" : undefined;
+  const suffix = platform === "win32" ? "-windows.zip" : platform === "linux" ? "-linux.tar.gz" : platform === "darwin" ? "-macos.tar.gz" : undefined;
   return suffix ? release.assets.find((a) => a.name.endsWith(suffix)) : undefined;
 }
 
@@ -71,7 +81,7 @@ function settingsPath(): string {
 export function getChannel(): Channel {
   try {
     const j = JSON.parse(readFileSync(settingsPath(), "utf8")) as { updateChannel?: string };
-    return j.updateChannel === "all" ? "all" : "stable";
+    return normalizeChannel(j.updateChannel);
   } catch {
     return "stable";
   }
@@ -161,16 +171,20 @@ export async function installUpdate(opts: { channel?: Channel; log?: (l: string)
   const res = await fetch(asset.browser_download_url, { headers: { "user-agent": "chip-chop-updater" }, signal: AbortSignal.timeout(300000) });
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
   const dir = mkdtempSync(join(tmpdir(), "chip-chop-update-"));
-  const file = join(dir, asset.name);
-  writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-  // bsdtar on Windows 10+ extracts zip files too.
-  await run("tar", [asset.name.endsWith(".zip") ? "-xf" : "-xzf", file, "-C", dir], dir, log);
-  const folder = readdirSync(dir).find((d) => d.startsWith("chip-chop-") && existsSync(join(dir, d, process.platform === "win32" ? "install.ps1" : "install.sh")));
-  if (!folder) throw new Error("the downloaded bundle has no installer");
-  const env = { ...process.env, CHIPCHOP_SKIP_BROWSER: "1" };
-  log("installing over the current version");
-  if (process.platform === "win32") await run("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(dir, folder, "install.ps1")], dir, log, { ...env, CHIPCHOP_SKIP_PATH: "1" });
-  else await run("bash", [join(dir, folder, "install.sh")], dir, log, env);
+  try {
+    const file = join(dir, asset.name);
+    writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+    // bsdtar on Windows 10+ extracts zip files too.
+    await run("tar", [asset.name.endsWith(".zip") ? "-xf" : "-xzf", file, "-C", dir], dir, log);
+    const folder = readdirSync(dir).find((d) => d.startsWith("chip-chop-") && existsSync(join(dir, d, process.platform === "win32" ? "install.ps1" : "install.sh")));
+    if (!folder) throw new Error("the downloaded bundle has no installer");
+    const env = { ...process.env, CHIPCHOP_SKIP_BROWSER: "1" };
+    log("installing over the current version");
+    if (process.platform === "win32") await run("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(dir, folder, "install.ps1")], dir, log, { ...env, CHIPCHOP_SKIP_PATH: "1" });
+    else await run("bash", [join(dir, folder, "install.sh")], dir, log, env);
+  } finally {
+    rmSync(dir, { recursive: true, force: true }); // el instalador descargado no se queda ocupando espacio
+  }
   log(`updated to ${info.latest}. Restart chip-chop to use it.`);
   return info;
 }

@@ -16,7 +16,7 @@ import { chipDir, uiDir } from "./paths.js";
 import type { StageName } from "./types.js";
 import { formatIssues, validateCatalogDir } from "./validate.js";
 import { stringify } from "yaml";
-import { checkForUpdate, getChannel, installUpdate, setChannel } from "./updater.js";
+import { checkForUpdate, getChannel, installUpdate, normalizeChannel, setChannel } from "./updater.js";
 
 interface Job {
   id: string;
@@ -149,8 +149,8 @@ export async function startUi(appDir: string, port = 0): Promise<UiServer> {
       }
       if (u.pathname === "/api/update/channel" && req.method === "POST") {
         const b = await body(req);
-        if (b.channel !== "stable" && b.channel !== "all") return void send(res, 400, { error: "channel must be stable or all" });
-        setChannel(b.channel);
+        if (b.channel !== "stable" && b.channel !== "latest") return void send(res, 400, { error: "channel must be stable or latest" });
+        setChannel(normalizeChannel(b.channel));
         return void send(res, 200, { channel: b.channel });
       }
       if (u.pathname === "/api/update/install" && req.method === "POST") {

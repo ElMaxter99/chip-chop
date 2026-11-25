@@ -1,8 +1,8 @@
 name: Release candidate
 
 # Manual only. Builds a pre-release `vX.Y.Z-rc.N` from the branch you pick, with the same checks and
-# bundles as a final release, and publishes it as a GitHub pre-release. Users on the `stable` update
-# channel never receive it; users on `all` do. Nothing is committed: the rc version is applied in the
+# bundles as a final release, and publishes it as a GitHub pre-release. Users on the «Solo estables» update
+# channel never receive it; users on «Últimas» do. Nothing is committed: the rc version is applied in the
 # runner only, so package.json keeps the last stable version.
 #
 # Use "dry run" first: it builds and tests everything and attaches the bundles to the run, publishes nothing.
@@ -68,6 +68,7 @@ jobs:
           name: bundles
           path: |
             chip-chop-*-linux.tar.gz
+            chip-chop-*-macos.tar.gz
             chip-chop-*-windows.zip
             chip-chop-*.tgz
 
@@ -90,11 +91,32 @@ jobs:
           & (Join-Path $dir "install.ps1")
           & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" --version
 
+  # macOS: informativo. Nadie ha probado chip-chop en un Mac real; este job solo comprueba que el paquete se instala
+  # y arranca en el runner. Si falla, no bloquea la publicación (se avisa en las notas de la release).
+  smoke-macos:
+    needs: build
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          export HOME="$(mktemp -d)"
+          tar xzf chip-chop-*-macos.tar.gz
+          CHIPCHOP_SKIP_BROWSER=1 ./chip-chop-*-macos/install.sh
+          "$HOME/.local/bin/chip-chop" --version
+          "$HOME/.local/bin/chip-chop" help | head -3
+
   publish:
-    needs: [build, smoke-windows]
-    if: ${{ !inputs.dry_run }}
+    needs: [build, smoke-windows, smoke-macos]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.build.result == 'success' && needs.smoke-windows.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: bundles
@@ -102,4 +124,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${{ needs.build.outputs.tag }}" chip-chop-*-linux.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --prerelease --target "$GITHUB_SHA" --title "chip-chop ${{ needs.build.outputs.tag }} (release candidate)" --generate-notes
+        run: |
+          TAG="${{ needs.build.outputs.tag }}"
+          node scripts/release-notes.mjs "${TAG#v}" --out notes.md
+          if [ "${{ needs.smoke-macos.result }}" != "success" ]; then printf '\n> El paquete de macOS no pasó la comprobación automática (o no se ha validado nunca en un Mac real).\n' >> notes.md; fi
+          gh release create "$TAG" chip-chop-*-linux.tar.gz chip-chop-*-macos.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --draft --prerelease --target "$GITHUB_SHA" --title "chip-chop $TAG (release candidate)" --notes-file notes.md
+          gh release edit "$TAG" --draft=false --prerelease --tag "$TAG"

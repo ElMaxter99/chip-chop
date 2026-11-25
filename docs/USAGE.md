@@ -16,7 +16,9 @@ On Windows, unzip `chip-chop-<version>-windows.zip` and run, in PowerShell:
 powershell -ExecutionPolicy Bypass -File .\chip-chop-<version>-windows\install.ps1
 ```
 
-Open a new terminal afterwards. Supported platforms are Linux and Windows (macOS is not a target for now).
+Open a new terminal afterwards. Linux and Windows are the validated platforms.
+
+**macOS (untested):** a `chip-chop-<version>-macos.tar.gz` bundle is published too (`tar xzf … && ./chip-chop-*-macos/install.sh`, then add `~/.local/bin` to `~/.zshrc`'s PATH). Nobody has run chip-chop on a real Mac yet; CI only checks that it installs and starts on a macOS runner (informational, it never blocks a release). Expect to find rough edges and report them.
 `build.nodeVersion` (running a legacy build under another Node) only works on Linux through nvm; on Windows start chip-chop under that Node version instead.
 
 (The plain `chip-chop-<version>.tgz` is also attached: `npm install -g ./chip-chop-<version>.tgz` and `npx playwright install chromium`.)
@@ -95,13 +97,13 @@ Honest list, as of v0.1:
 
 chip-chop reads the GitHub releases of this repository. Two channels:
 
-- `stable` (default): final releases only; release candidates (`-rc.N`) are ignored.
-- `all`: the newest version wins, whether it is a release candidate or a final release.
+- `stable` («Solo estables», default): final releases only; release candidates (`-rc.N`) are ignored.
+- `latest` («Últimas»): the newest version wins, whether it is a release candidate or a final release (a final `X.Y.Z` beats its own `-rc.N`). `all` is accepted as an old alias.
 
 ```bash
-chip-chop update channel all      # or: stable
+chip-chop update channel latest   # or: stable
 chip-chop update --check          # exit code 10 when an update exists
-chip-chop update                  # downloads the bundle for your OS and runs its installer
+chip-chop update                  # downloads the bundle for your OS (Linux, Windows, macOS) and runs its installer; the download is deleted afterwards
 ```
 
 The local app has the same controls in the *Project* tab. The choice is stored in `~/.chipchop/settings.json`

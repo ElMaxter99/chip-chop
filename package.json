@@ -14,7 +14,12 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "validate:schemas": "node scripts/validate-schemas.mjs"
+    "validate:schemas": "node scripts/validate-schemas.mjs",
+    "test:scripts": "node --test scripts/changelog.test.mjs",
+    "changelog:check": "node scripts/changelog.mjs check",
+    "changelog:preview": "node scripts/changelog.mjs preview",
+    "changelog:release": "node scripts/changelog.mjs release",
+    "release:notes": "node scripts/release-notes.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

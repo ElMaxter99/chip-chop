@@ -17,6 +17,7 @@ accessibility tree, network requests and the flow graph between screens.
 tar xzf chip-chop-*-linux.tar.gz && ./chip-chop-*-linux/install.sh   # needs Node 22+ and git
 # Windows: unzip chip-chop-<version>-windows.zip, then in PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .\chip-chop-<version>-windows\install.ps1
+# macOS (untested): chip-chop-<version>-macos.tar.gz, same steps as Linux
 cd your-app
 chip-chop doctor                            # node, git, Chromium, Claude/Copilot CLIs
 chip-chop init --framework angularjs

@@ -27,6 +27,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      - name: Script tests (changelog)
+        run: npm run test:scripts
 
   # Real browser, real pngjs/pixelmatch: builds a temp git repo from examples/static-demo
   # and runs restyle and flow-audit comparisons end to end.
@@ -44,4 +46,32 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e --workspace chip-chop
+
+  # El flujo de release exige una entrada en changelog/unreleased/ cuando una PR cambia la app.
+  changelog:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run changelog:check -- --base origin/${{ github.base_ref }}
+
+  # macOS: informativo (continue-on-error). No hay Mac real detrás; esto solo cazaría roturas obvias.
+  macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install chromium
       - run: npm run test:e2e --workspace chip-chop

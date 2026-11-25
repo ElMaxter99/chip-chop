@@ -156,7 +156,7 @@
   // ---------- Actualizar ----------
   function renderUpdate() {
     var el = $("actualizar");
-    el.innerHTML = '<div><h1>Actualizaciones</h1><p class="sub">chip-chop lee las versiones publicadas en GitHub.</p></div><div class="card" id="upcard">Buscando…</div><div class="card"><h2>Canal</h2><label class="radio"><input type="radio" name="canal" value="stable"><span><b>Estable</b><br><span class="mut small">Solo versiones finales. Ignora las candidatas.</span></span></label><label class="radio"><input type="radio" name="canal" value="all"><span><b>Todas</b><br><span class="mut small">Siempre la más reciente, sea candidata (rc) o final.</span></span></label></div><pre class="log" id="log3" hidden></pre>';
+    el.innerHTML = '<div><h1>Actualizaciones</h1><p class="sub">chip-chop lee las versiones publicadas en GitHub.</p></div><div class="card" id="upcard">Buscando…</div><div class="card"><h2>Canal</h2><label class="radio"><input type="radio" name="canal" value="stable"><span><b>Solo estables</b><br><span class="mut small">Solo versiones finales. Ignora las candidatas (rc).</span></span></label><label class="radio"><input type="radio" name="canal" value="latest"><span><b>Últimas</b><br><span class="mut small">Siempre la más reciente, sea candidata (rc) o final. La final gana a sus candidatas.</span></span></label></div><pre class="log" id="log3" hidden></pre>';
     el.querySelectorAll('input[name="canal"]').forEach(function (r) { r.onchange = function () { api("/api/update/channel", "POST", { channel: r.value }).then(fill); }; });
     fill();
     function fill() {
