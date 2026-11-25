@@ -53,12 +53,19 @@ async function loadCore() {
 }
 
 // ───────── Chromium (Playwright): se descarga la primera vez ─────────
+// `playwright` no exporta «./cli.js»: se resuelve el paquete y se busca el archivo al lado.
+function playwrightCli() {
+  const cli = path.join(path.dirname(requireCore.resolve("playwright")), "cli.js");
+  if (!existsSync(cli)) throw new Error(`No se encuentra ${cli}`);
+  return cli;
+}
+
 async function ensureChromium(parent) {
   const { chromium } = requireCore("playwright");
   if (existsSync(chromium.executablePath())) return;
   const splash = new BrowserWindow({ width: 440, height: 160, resizable: false, minimizable: false, maximizable: false, title: "Chip Chop", autoHideMenuBar: true, parent, show: true });
   splash.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(`<body style="margin:0;display:grid;place-items:center;height:100vh;background:#F1DFB8;color:#2B1B0E;font:15px system-ui"><div style="text-align:center"><b>Descargando el navegador de capturas…</b><br><small>Solo la primera vez (unos 150 MB).</small></div></body>`));
-  const cli = requireCore.resolve("playwright/cli.js");
+  const cli = playwrightCli();
   const code = await new Promise((resolve) => {
     const child = spawn(process.execPath, [cli, "install", "chromium"], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: "ignore" });
     child.on("error", () => resolve(1));
@@ -163,7 +170,8 @@ app.whenReady().then(async () => {
   try {
     core = await loadCore();
     const smoke = process.env.CHIPCHOP_SMOKE === "1"; // prueba automática: sin diálogos ni descargas
-    if (!smoke) await ensureChromium(null);
+    if (smoke) playwrightCli(); // la prueba comprueba que se localiza el instalador del navegador, sin descargarlo
+    else await ensureChromium(null);
     let dir = smoke ? process.env.CHIPCHOP_APP_DIR : readState().appDir;
     if (!dir || !existsSync(dir)) dir = await pickProject(null);
     if (!dir) return app.quit();
