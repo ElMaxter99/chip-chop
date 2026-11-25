@@ -7,6 +7,13 @@ directories:
   buildResources: build
 artifactName: chip-chop-${version}-${os}-${arch}.${ext}
 asar: true
+files:
+  - main.mjs
+  - update-logic.mjs
+  - preload.cjs
+  - home/**
+  - build/icon.png
+  - package.json
 icon: build/icon.png
 afterPack: desktop/after-pack.cjs
 extraResources:

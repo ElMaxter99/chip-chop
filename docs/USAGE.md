@@ -15,7 +15,7 @@ From the [latest GitHub Release](https://github.com/ElMaxter99/chip-chop/release
 | Fedora, openSUSE | `chip-chop-<version>-linux-x86_64.rpm` |
 | Any other Linux | `chip-chop-<version>-linux-x86_64.AppImage` |
 
-The installers are **not signed**: Windows SmartScreen and macOS Gatekeeper warn the first time (Windows: *More info → Run anyway*; macOS: right-click → *Open*, or `xattr -cr "/Applications/Chip Chop.app"`). On first launch the app asks for the project folder (change it later with *File → Open project*) and downloads Chromium once. Updates: *Project* tab → update (Windows and AppImage install by themselves; macOS, `.deb` and `.rpm` open the downloads page).
+The installers are **not signed**: Windows SmartScreen and macOS Gatekeeper warn the first time (Windows: *More info → Run anyway*; macOS: right-click → *Open*, or `xattr -cr "/Applications/Chip Chop.app"`). The app opens on a **Home** screen: your projects (add, open, remove from the list), the default AI settings for every project, and settings (version, update channel, system status). On first launch it downloads Chromium once, with progress shown on that screen. Inside a project, *‹ Inicio* (or Ctrl/⌘+H) goes back to Home. Updates: Home → *Ajustes* (or the *Project* tab inside a project) (Windows and AppImage install by themselves; macOS, `.deb` and `.rpm` open the downloads page).
 
 ### Terminal bundles
 
