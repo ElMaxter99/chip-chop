@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [v0.4.5](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.5) - 2026-11-25
+### Added
+- **Configuración inicial y control de la IA:** la primera vez la app descarga el navegador (con progreso) y deja la IA ya configurada con una configuración básica por herramienta (Claude, Copilot o Codex) en las cuatro etapas, que se puede cambiar. Los cambios en la pestaña IA se guardan solos con un aviso, al elegir herramienta se vuelven a buscar sus modelos (sin botón «Volver a buscar»), «Probar esta etapa» abre una ventana que muestra qué hace y el resultado, y si la herramienta o el modelo elegidos dejan de funcionar no se lanza la IA y se lleva al usuario a su configuración.
+
+### Fixed
+- **El icono de la app no se veía en Ubuntu:** el `.deb`, el `.rpm` y el AppImage solo llevaban un icono de 1024 px, que el lanzador y la barra de GNOME no usan. Ahora llevan todos los tamaños de 16 a 512 px.
+
 ## [v0.4.4](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.4) - 2026-11-25
 ### Added
 - **Funciones propias de una app de escritorio:** recuerda el tamaño y la posición de la ventana (y si estaba maximizada); avisa con una notificación del sistema cuando termina o falla una captura, comparación o generación con IA si la ventana no está al frente; se puede arrastrar la carpeta de una app sobre el Inicio para añadirla y abrirla; acepta la carpeta como argumento (`"Chip Chop.exe" C:\ruta\app`, también con la app ya abierta); y pregunta antes de cerrar si hay un trabajo en marcha.
