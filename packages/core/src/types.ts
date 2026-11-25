@@ -39,8 +39,10 @@ export interface Config {
       cookies?: { name: string; value: string; path?: string }[];
     };
   };
+  passthrough?: string[];
   externalAssets?: {
     mode?: "placeholder" | "download" | "block";
+    other?: "download" | "passthrough" | "block";
     defaultSize?: { width?: number; height?: number };
     sizes?: { match: string; width: number; height: number }[];
   };
@@ -164,4 +166,63 @@ export interface Report {
     addedTransitions?: { from: string; to: string; via?: string }[];
     removedTransitions?: { from: string; to: string; via?: string }[];
   };
+}
+
+// ---------- AI settings ----------
+
+export type StageName = "discover" | "flows" | "mocks" | "repair";
+
+export interface ProviderConfig {
+  type: "claude" | "copilot" | "custom";
+  command?: string;
+  extraArgs?: string[];
+  env?: Record<string, string>;
+  timeoutMs?: number;
+  allowedTools?: string[];
+  permissionMode?: string;
+  allowTools?: string[];
+  denyTools?: string[];
+  args?: string[];
+  promptVia?: "arg" | "stdin";
+}
+
+export interface StageConfig {
+  provider: string;
+  model?: string;
+  extraArgs?: string[];
+}
+
+export interface AiSettings {
+  providers?: Record<string, ProviderConfig>;
+  stages?: Partial<Record<StageName, StageConfig>>;
+  settings?: { maxRepairs?: number; promptsDir?: string };
+}
+
+// ---------- Capture runs ----------
+
+export interface CaptureResult {
+  id: string;
+  viewport: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface GraphEdge {
+  from: string;
+  to: string;
+  via?: string;
+}
+
+export interface RunInfo {
+  label: string;
+  ref?: string;
+  commit?: string;
+  baseUrl: string;
+  catalogSource: "cwd" | "ref";
+  states: { id: string; kind: StateKind; title: string }[];
+  viewports: string[];
+  results: CaptureResult[];
+  graph: { nodes: string[]; edges: GraphEdge[] };
+  unmocked: { state: string; method: string; url: string }[];
+  assetFailures: { url: string; error: string }[];
 }

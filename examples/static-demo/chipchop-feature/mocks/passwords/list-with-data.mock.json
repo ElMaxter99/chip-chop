@@ -1,0 +1,30 @@
+{
+  "id": "passwords/list-with-data",
+  "scenario": "happy",
+  "requests": [
+    {
+      "match": { "method": "GET", "url": "/api/passwords" },
+      "responseSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["id", "title", "username", "isActive"],
+          "properties": {
+            "id": { "type": "integer" },
+            "title": { "type": "string" },
+            "username": { "type": "string" },
+            "isActive": { "type": "boolean" }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "json": [
+          { "id": 1, "title": "Email", "username": "ana@example.com", "isActive": true },
+          { "id": 2, "title": "Bank", "username": "ana.perez", "isActive": true },
+          { "id": 3, "title": "Old forum", "username": "anap", "isActive": false }
+        ]
+      }
+    }
+  ]
+}

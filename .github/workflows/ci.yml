@@ -24,10 +24,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
-  # Once the engine exists, this job runs chip-chop against the demo apps
-  # (AngularJS first, then Angular and React) and uploads the reports as artifacts.
-  examples:
-    if: ${{ false }}   # enable when packages/core can capture and compare
+  # Real browser, real pngjs/pixelmatch: builds a temp git repo from examples/static-demo
+  # and runs restyle and flow-audit comparisons end to end.
+  e2e:
     runs-on: ubuntu-latest
     needs: check
     steps:
@@ -37,10 +36,4 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npx playwright install --with-deps chromium
-      - run: npm run build
-      - run: npm run test:examples --workspaces --if-present
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: chip-chop-example-reports
-          path: examples/**/.chipchop/reports/
+      - run: npm run test:e2e --workspace chip-chop

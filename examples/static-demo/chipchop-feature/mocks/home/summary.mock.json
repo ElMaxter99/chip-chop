@@ -1,0 +1,14 @@
+{
+  "id": "home/summary",
+  "requests": [
+    {
+      "match": { "method": "GET", "url": "/api/summary" },
+      "responseSchema": {
+        "type": "object",
+        "required": ["total", "active", "weak"],
+        "properties": { "total": { "type": "integer" }, "active": { "type": "integer" }, "weak": { "type": "integer" } }
+      },
+      "response": { "status": 200, "json": { "total": 3, "active": 2, "weak": 1 } }
+    }
+  ]
+}

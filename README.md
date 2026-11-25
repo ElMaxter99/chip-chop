@@ -3,9 +3,26 @@
 Capture every UI state of a web app on two git refs and compare them: pixels,
 accessibility tree, network requests and the flow graph between screens.
 
-> **Status: pre-alpha.** The file formats, schemas and AI guides are defined and
-> validated. The capture/compare engine is under construction (see
-> [docs/ROADMAP.md](docs/ROADMAP.md)).
+> **Status: v0.1 (early).** The engine, the CLI and the local app work end to end
+> on the bundled demo app (see [what is tested](docs/USAGE.md#what-has-been-tested)).
+> It has not yet been run on a large real-world app. Expect rough edges and
+> [please report them](https://github.com/ElMaxter99/chip-chop/issues).
+
+## Quick start
+
+```bash
+npm install -g ./chip-chop-0.1.0.tgz       # from the GitHub Release
+npx playwright install chromium             # once
+cd your-app
+chip-chop doctor                            # node, git, Chromium, Claude/Copilot CLIs
+chip-chop init --framework angularjs
+chip-chop ui                                # local app in your browser
+# or from the terminal:
+chip-chop ai run                            # your AI CLI writes states, flows and mocks
+chip-chop compare --base develop --head my-branch
+```
+
+Full walkthrough: [docs/USAGE.md](docs/USAGE.md).
 
 ## What it is for
 
@@ -83,10 +100,10 @@ examples are in [`packages/schemas/examples`](packages/schemas/examples).
 
 | Path | Contents |
 |---|---|
-| `packages/core` | Engine and CLI (`chip-chop`): types, URL matching, command surface |
+| `packages/core` | The installable `chip-chop` package: engine, CLI, AI providers, local server and UI |
 | `packages/schemas` | JSON Schemas for config, states, flows, mocks and reports, with examples |
 | `packages/skills` | `SKILL.md` and guides for AngularJS, Angular, React, states/flows and mocks |
-| `examples/` | Demo apps used to test the engine (AngularJS first) |
+| `examples/static-demo` | Small app with two variants (restyle, new modal) used by the end-to-end tests |
 | `.github/workflows` | CI, release, and a reusable workflow to compare two refs in a PR |
 
 ## Development
@@ -96,6 +113,7 @@ npm install
 npm run validate:schemas   # schemas, valid and invalid examples, cross-references
 npm run typecheck
 npm test
+npx playwright install chromium && npm run test:e2e --workspace chip-chop
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

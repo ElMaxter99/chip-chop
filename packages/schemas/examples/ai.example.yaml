@@ -1,0 +1,26 @@
+# .chipchop/ai.yaml  (or ~/.chipchop/ai.yaml for global defaults)
+# Every stage can use a different provider and model. Model names are free text:
+# they are handed to the CLI untouched, so use whatever your CLI accepts.
+providers:
+  claude:
+    type: claude
+    command: claude
+    timeoutMs: 900000
+  copilot:
+    type: copilot
+    command: copilot
+  # Any other CLI:
+  # my-cli:
+  #   type: custom
+  #   command: my-cli
+  #   args: ["--prompt", "{prompt}", "--model", "{model}"]
+
+stages:
+  discover: { provider: claude, model: sonnet }    # routes, overlays -> states.yaml
+  flows:    { provider: claude, model: haiku }     # journeys -> flows/*.flow.yaml
+  mocks:    { provider: claude, model: sonnet }    # typed API responses -> mocks/
+  repair:   { provider: claude, model: sonnet }    # fixes validation errors
+
+settings:
+  maxRepairs: 3
+  # promptsDir: .chipchop/ai/prompts

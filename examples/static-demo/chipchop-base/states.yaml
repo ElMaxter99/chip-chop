@@ -1,0 +1,42 @@
+states:
+  - id: login
+    title: Login
+    kind: page
+    route: /#!/login
+
+  - id: home
+    title: Home
+    kind: page
+    route: /#!/home
+    mocks: [home/summary]
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords
+    title: Password list
+    kind: page
+    route: /#!/passwords
+    mocks: [passwords/list-with-data]
+    ready:
+      visible: { role: table }
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-empty
+    title: Password list, no data
+    kind: page
+    route: /#!/passwords
+    mocks: [passwords/list-empty]
+    mask:
+      - { selector: ".clock" }
+
+  - id: passwords-delete-modal
+    title: Delete confirmation
+    kind: modal
+    opensFrom: passwords
+    via:
+      - click: { role: button, name: "Delete" }
+    ready:
+      visible: { role: dialog }
+    mask:
+      - { selector: ".clock" }

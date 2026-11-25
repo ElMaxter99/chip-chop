@@ -31,6 +31,7 @@ const kinds = {
   flow: "flow.schema.json",
   mock: "mock.schema.json",
   report: "report.schema.json",
+  ai: "ai.schema.json",
 };
 
 const validators = {};
@@ -45,6 +46,7 @@ function kindOf(name) {
   if (name.startsWith("config")) return "config";
   if (name.includes("states")) return "states";
   if (name.startsWith("report")) return "report";
+  if (name.startsWith("ai")) return "ai";
   return null;
 }
 

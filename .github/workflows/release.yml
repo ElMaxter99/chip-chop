@@ -1,27 +1,35 @@
 name: Release
 
+# Push a tag like v0.1.0 to build, test and publish a GitHub Release with the
+# installable tarball attached. Publishing to npm is a separate, manual workflow
+# step (see docs/RELEASING.md) so a release never depends on an npm token.
 on:
   push:
     tags:
       - "v*.*.*"
 
 permissions:
-  contents: read
-  id-token: write   # npm trusted publishing (OIDC) + provenance, no long-lived token
+  contents: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
       - run: npm install
       - run: npm run validate:schemas
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
-      - name: Publish packages
-        run: npm publish --workspaces --provenance --access public --if-present
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e --workspace chip-chop
+      - name: Pack
+        run: npm pack --workspace chip-chop
+      - name: Check the tag matches the package version
+        run: test "v$(node -p "require('./packages/core/package.json').version")" = "${GITHUB_REF_NAME}"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" chip-chop-*.tgz --title "chip-chop ${GITHUB_REF_NAME}" --generate-notes

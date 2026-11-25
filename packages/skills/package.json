@@ -7,7 +7,5 @@
     "SKILL.md",
     "guides"
   ],
-  "publishConfig": {
-    "access": "public"
-  }
+  "private": true
 }

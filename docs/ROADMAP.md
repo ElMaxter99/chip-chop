@@ -1,12 +1,20 @@
 # Roadmap
 
-## Done
-- Repository, MIT license, CI skeleton, release workflow with npm provenance.
-- JSON Schemas: config, states, flow, mock, report, with valid and invalid
-  examples and a cross-reference validator.
-- AI guides: `SKILL.md`, AngularJS, Angular, React, states/flows, mocks.
-- `packages/core`: types and mock URL matching with tests; CLI command surface.
+## Done in v0.1
+- Schemas, AI guides, `validate`, `init`, `capture`, `compare` (restyle / flow-audit), HTML + Markdown
+  reports, flow graph with Mermaid output.
+- Configurable AI layer: Claude CLI and Copilot CLI providers (plus `custom`), provider and model per
+  stage, prompt overrides, validate-and-repair loop.
+- Local app (`chip-chop ui`), `doctor`, GitHub Release with an installable tarball.
+- End-to-end CI against `examples/static-demo` with a real browser.
 
+## Next
+- Run on real AngularJS, then Angular and React apps and fix what that shows (v0.2).
+- Demo apps per framework in `examples/`.
+- Electron shell around the local app; npm publication.
+- Reusable GitHub workflow that comments on PRs.
+
+## Original plan (kept for reference)
 ## 1. MVP engine
 - `validate` command (schemas + cross-references, from the existing script).
 - `capture`: Playwright, mock replay, determinism, PNG + ARIA + requests.

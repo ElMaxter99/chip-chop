@@ -12,9 +12,8 @@
     "./states.schema.json": "./states.schema.json",
     "./flow.schema.json": "./flow.schema.json",
     "./mock.schema.json": "./mock.schema.json",
-    "./report.schema.json": "./report.schema.json"
+    "./report.schema.json": "./report.schema.json",
+    "./ai.schema.json": "./ai.schema.json"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "private": true
 }

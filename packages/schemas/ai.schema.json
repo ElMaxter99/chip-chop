@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chip-chop:schema:ai",
+  "title": "chip-chop AI settings",
+  "description": "Which AI CLI runs each stage, with which model and arguments. Stored per project at <app>/.chipchop/ai.yaml, or globally at ~/.chipchop/ai.yaml. Project settings override global ones.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "providers": {
+      "type": "object",
+      "description": "Named providers. The names are free; stages refer to them.",
+      "additionalProperties": { "$ref": "#/$defs/provider" }
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One entry per stage, so each can use a different provider and model (a small model for flows, a stronger one for mocks).",
+      "properties": {
+        "discover": { "$ref": "#/$defs/stage" },
+        "flows": { "$ref": "#/$defs/stage" },
+        "mocks": { "$ref": "#/$defs/stage" },
+        "repair": { "$ref": "#/$defs/stage" }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxRepairs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3,
+          "description": "How many times validation errors are sent back to the AI to fix."
+        },
+        "promptsDir": {
+          "type": "string",
+          "description": "Folder with prompt templates that replace the built-in ones: discover.md, flows.md, mocks.md, repair.md."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": ["claude", "copilot", "custom"],
+          "description": "claude: Claude Code CLI. copilot: GitHub Copilot CLI. custom: any CLI, described with args."
+        },
+        "command": { "type": "string", "description": "Executable name or absolute path. Defaults to claude / copilot." },
+        "extraArgs": { "type": "array", "items": { "type": "string" }, "description": "Appended to the built-in arguments." },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "timeoutMs": { "type": "integer", "minimum": 10000, "default": 900000 },
+        "allowedTools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "claude only. Tools allowed without prompting. Default: Read, Glob, Grep, Write, Edit."
+        },
+        "permissionMode": {
+          "type": "string",
+          "description": "claude only. Default: acceptEdits."
+        },
+        "allowTools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "copilot only. Passed to --allow-tool. Default: write."
+        },
+        "denyTools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "copilot only. Passed to --deny-tool. Default: shell."
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "custom only. Full argument list. {prompt} and {model} are replaced; an argument pair is dropped when {model} is empty."
+        },
+        "promptVia": {
+          "enum": ["arg", "stdin"],
+          "description": "custom only. How the prompt is delivered. Default: arg."
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "required": ["provider"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "description": "Key of an entry in providers." },
+        "model": { "type": "string", "description": "Free text, passed to the CLI as is (an alias or a full model name)." },
+        "extraArgs": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

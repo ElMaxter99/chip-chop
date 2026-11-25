@@ -96,15 +96,25 @@
         }
       }
     },
+    "passthrough": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Path globs of same-origin XHR/fetch requests that are real static files of the app (templates, i18n JSON) and must reach the server instead of being treated as API calls. Common static extensions (.html, .js, .css, .svg, ...) are already passed through."
+    },
     "externalAssets": {
       "type": "object",
       "additionalProperties": false,
-      "description": "What to do with images, fonts and scripts hosted outside the app.",
+      "description": "What to do with resources hosted outside the app.",
       "properties": {
         "mode": {
           "enum": ["placeholder", "download", "block"],
           "default": "placeholder",
-          "description": "placeholder: serve a generated image of the same size; download: fetch once into assets/ and replay; block: abort the request."
+          "description": "Images only. placeholder: serve a generated image of the same size; download: fetch once into assets/ and replay; block: abort the request."
+        },
+        "other": {
+          "enum": ["download", "passthrough", "block"],
+          "default": "download",
+          "description": "Scripts, stylesheets, fonts and media from other origins (CDN libraries, web fonts). download: fetch once into assets/ and replay offline; passthrough: let the request reach the network; block: abort it."
         },
         "defaultSize": {
           "type": "object",
