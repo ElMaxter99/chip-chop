@@ -77,7 +77,8 @@ jobs:
           Expand-Archive chip-chop-*-windows.zip -DestinationPath .
           $env:CHIPCHOP_SKIP_BROWSER = "1"; $env:CHIPCHOP_SKIP_PATH = "1"
           $env:CHIPCHOP_PREFIX = Join-Path $env:RUNNER_TEMP "cc"
-          & (Get-ChildItem -Directory chip-chop-*-windows | Select-Object -First 1).FullName\install.ps1
+          $dir = (Get-ChildItem -Directory chip-chop-*-windows | Select-Object -First 1).FullName
+          & (Join-Path $dir "install.ps1")
           & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" --version
           & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" help
 

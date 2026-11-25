@@ -64,7 +64,7 @@ if (prompt.startsWith("chip-chop validate")) {
   chmodSync(fake, 0o755);
   writeText(
     join(dir, ".chipchop/ai.yaml"),
-    `providers:\n  fake: { type: custom, command: node, args: ["${fake}", "{prompt}"] }\nstages:\n  discover: { provider: fake }\n  flows: { provider: fake }\n  mocks: { provider: fake }\n  repair: { provider: fake }\nsettings: { maxRepairs: 2 }\n`,
+    `providers:\n  fake: { type: custom, command: node, args: ["${fake.replaceAll("\\", "/")}", "{prompt}"] }\nstages:\n  discover: { provider: fake }\n  flows: { provider: fake }\n  mocks: { provider: fake }\n  repair: { provider: fake }\nsettings: { maxRepairs: 2 }\n`,
   );
   const lines: string[] = [];
   const r = await runAi({ appDir: dir, stages: ["mocks"], log: (l) => lines.push(l) });
