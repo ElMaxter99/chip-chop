@@ -43,6 +43,7 @@ jobs:
           npm run typecheck
           npm test
           npx playwright install --with-deps chromium
+          npm install --prefix examples/angularjs-demo --no-audit --no-fund
           npm run test:e2e --workspace chip-chop
           bash scripts/make-bundle.sh
       - name: Smoke-test the Linux bundle
