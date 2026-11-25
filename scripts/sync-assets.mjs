@@ -1,6 +1,6 @@
 // Copies the schemas and the AI guides into packages/core/assets so the engine
 // ships as one self-contained package. Runs before every build and pack.
-import { cpSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,4 +21,27 @@ mkdirSync(join(out, "skills"), { recursive: true });
 cpSync(join(skillsSrc, "SKILL.md"), join(out, "skills", "SKILL.md"));
 cpSync(join(skillsSrc, "guides"), join(out, "skills", "guides"), { recursive: true });
 
-console.log("assets synced to packages/core/assets");
+// UI fonts (SIL OFL), copied next to the UI so the app works offline. Skipped when not installed.
+const fonts = [
+  ["bricolage-grotesque", [400, 600, 800]],
+  ["jetbrains-mono", [400, 700]],
+];
+const fontsOut = join(root, "packages", "core", "ui", "fonts");
+rmSync(fontsOut, { recursive: true, force: true });
+mkdirSync(fontsOut, { recursive: true });
+let copied = 0;
+for (const [name, weights] of fonts) {
+  const dir = [join(root, "node_modules", "@fontsource", name, "files"), join(root, "packages", "core", "node_modules", "@fontsource", name, "files")].find(existsSync);
+  if (!dir) {
+    console.warn(`warning: @fontsource/${name} not installed; the UI falls back to system fonts`);
+    continue;
+  }
+  for (const w of weights) {
+    const f = `${name}-latin-${w}-normal.woff2`;
+    if (existsSync(join(dir, f))) {
+      cpSync(join(dir, f), join(fontsOut, f));
+      copied++;
+    } else console.warn(`warning: ${f} not found`);
+  }
+}
+console.log(`assets synced to packages/core/assets (${copied} font files)`);

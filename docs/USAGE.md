@@ -46,6 +46,13 @@ tab *Run* to start it). Review what the AI wrote: states, flows and mocks are pl
 Things to check by hand in `.chipchop/config.yaml` for an old AngularJS app: the build and serve commands,
 the Node version the build needs (`build.nodeVersion`), and the external image hosts.
 
+## The local app
+
+`chip-chop ui` opens the app in your browser (it only listens on 127.0.0.1 and needs the link it prints).
+Tabs: **Proyecto** (create `.chipchop`, generate with AI, validate, environment check), **IA** (provider and
+model per stage, with a *Probar* button), **Comparar** (pick two branches, live log, result, open report),
+**Informes** and **Actualizar** (version button, top right). The interface is in Spanish for now.
+
 ## 3. Compare
 
 ```bash

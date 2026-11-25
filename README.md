@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.svg" width="96" alt="chip-chop logo: an acorn split in two"></p>
+
 # chip-chop
 
 Capture every UI state of a web app on two git refs and compare them: pixels,
@@ -18,7 +20,7 @@ tar xzf chip-chop-*-linux.tar.gz && ./chip-chop-*-linux/install.sh   # needs Nod
 cd your-app
 chip-chop doctor                            # node, git, Chromium, Claude/Copilot CLIs
 chip-chop init --framework angularjs
-chip-chop ui                                # local app in your browser
+chip-chop ui                                # local app in your browser (Spanish UI)
 # or from the terminal:
 chip-chop ai run                            # your AI CLI writes states, flows and mocks
 chip-chop compare --base develop --head my-branch

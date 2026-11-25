@@ -1,0 +1,105 @@
+name: Release candidate
+
+# Manual only. Builds a pre-release `vX.Y.Z-rc.N` from the branch you pick, with the same checks and
+# bundles as a final release, and publishes it as a GitHub pre-release. Users on the `stable` update
+# channel never receive it; users on `all` do. Nothing is committed: the rc version is applied in the
+# runner only, so package.json keeps the last stable version.
+#
+# Use "dry run" first: it builds and tests everything and attaches the bundles to the run, publishes nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Target version without suffix, e.g. 0.2.0 (the rc number is chosen automatically)"
+        required: true
+      dry_run:
+        description: "Dry run: build and test, but do not publish"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-candidate
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the version and pick the next rc number
+        id: next
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then echo "version must look like 1.2.3"; exit 1; fi
+          if gh release view "v$VERSION" >/dev/null 2>&1; then echo "v$VERSION is already a final release"; exit 1; fi
+          LAST=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -E "^v$VERSION-rc\.[0-9]+$" | sed -E 's/.*-rc\.//' | sort -n | tail -1 || true)
+          N=$(( ${LAST:-0} + 1 ))
+          echo "tag=v$VERSION-rc.$N" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION-rc.$N" >> "$GITHUB_OUTPUT"
+          echo "Building $VERSION-rc.$N from $GITHUB_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply the rc version (not committed)
+        run: npm version "${{ steps.next.outputs.version }}" --no-git-tag-version --workspace chip-chop
+      - run: |
+          npm install
+          npm run validate:schemas
+          npm run typecheck
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:e2e --workspace chip-chop
+          bash scripts/make-bundle.sh
+      - name: Smoke-test the Linux bundle
+        run: |
+          export HOME="$(mktemp -d)"
+          tar xzf chip-chop-*-linux.tar.gz
+          CHIPCHOP_SKIP_BROWSER=1 ./chip-chop-*-linux/install.sh
+          test "$("$HOME/.local/bin/chip-chop" --version)" = "${{ steps.next.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles
+          path: |
+            chip-chop-*-linux.tar.gz
+            chip-chop-*-windows.zip
+            chip-chop-*.tgz
+
+  smoke-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - shell: pwsh
+        run: |
+          Expand-Archive chip-chop-*-windows.zip -DestinationPath .
+          $env:CHIPCHOP_SKIP_BROWSER = "1"; $env:CHIPCHOP_SKIP_PATH = "1"
+          $env:CHIPCHOP_PREFIX = Join-Path $env:RUNNER_TEMP "cc"
+          $dir = (Get-ChildItem -Directory chip-chop-*-windows | Select-Object -First 1).FullName
+          & (Join-Path $dir "install.ps1")
+          & "$env:CHIPCHOP_PREFIX\bin\chip-chop.cmd" --version
+
+  publish:
+    needs: [build, smoke-windows]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+      - name: Create the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "${{ needs.build.outputs.tag }}" chip-chop-*-linux.tar.gz chip-chop-*-windows.zip chip-chop-*.tgz --prerelease --target "$GITHUB_SHA" --title "chip-chop ${{ needs.build.outputs.tag }} (release candidate)" --generate-notes

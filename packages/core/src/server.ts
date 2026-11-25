@@ -3,7 +3,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import { loadAiConfig, runAi, testProvider } from "./ai.js";
-import { hasCatalog } from "./catalog.js";
+import { hasCatalog, loadCatalog } from "./catalog.js";
+import { failureReasons, reportDir } from "./compare.js";
+import { currentVersion } from "./updater.js";
+import type { Report } from "./types.js";
 import { doctor } from "./doctor.js";
 import { exists, writeText } from "./fsutil.js";
 import { initProject } from "./init.js";
@@ -24,7 +27,7 @@ interface Job {
   result?: unknown;
 }
 
-const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".svg": "image/svg+xml" };
+const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
 
 export interface UiServer {
   server: Server;
@@ -84,9 +87,11 @@ export async function startUi(appDir: string, port = 0): Promise<UiServer> {
       const cookieOk = (req.headers.cookie ?? "").split(/;\s*/).includes(`cc=${token}`);
       const authed = u.searchParams.get("token") === token || req.headers["x-chipchop-token"] === token || cookieOk;
 
-      if (u.pathname === "/" || u.pathname === "/index.html" || u.pathname === "/app.js" || u.pathname === "/style.css") {
-        const f = join(uiDir, u.pathname === "/" ? "index.html" : u.pathname.slice(1));
-        res.writeHead(200, { "content-type": MIME[extname(f)] ?? "text/plain", "cache-control": "no-store", ...(u.searchParams.get("token") === token ? { "set-cookie": `cc=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}) }).end(readFileSync(f));
+      if (req.method === "GET" && (u.pathname === "/" || /^\/(app\.js|style\.css|favicon\.svg|index\.html|fonts\/[\w.-]+)$/.test(u.pathname))) {
+        const rel = u.pathname === "/" ? "index.html" : u.pathname.slice(1);
+        const f = resolve(uiDir, rel);
+        if (!f.startsWith(uiDir + sep) || !exists(f)) return void send(res, 404, { error: "not found" });
+        res.writeHead(200, { "content-type": MIME[extname(f)] ?? "application/octet-stream", "cache-control": rel.startsWith("fonts/") ? "max-age=86400" : "no-store", ...(rel === "index.html" && u.searchParams.get("token") === token ? { "set-cookie": `cc=${token}; HttpOnly; SameSite=Strict; Path=/` } : {}) }).end(readFileSync(f));
         return;
       }
       if (!authed) return void send(res, 401, { error: "missing or wrong token" });
@@ -107,11 +112,33 @@ export async function startUi(appDir: string, port = 0): Promise<UiServer> {
           }
         })();
         const reports = exists(reportsRoot) ? readdirSync(reportsRoot).filter((d) => exists(join(reportsRoot, d, "report.html"))) : [];
-        return void send(res, 200, { appDir, hasCatalog: hasCatalog(appDir), refs, reports });
+        const counts = (() => {
+          try {
+            const c = loadCatalog(appDir);
+            return { states: c.states.length, flows: c.flows.length, mocks: c.mocks.length };
+          } catch {
+            return { states: 0, flows: 0, mocks: 0 };
+          }
+        })();
+        return void send(res, 200, { appDir, version: currentVersion(), hasCatalog: hasCatalog(appDir), counts, refs, reports });
+      }
+      if (u.pathname === "/api/reports" && req.method === "GET") {
+        const list = (exists(reportsRoot) ? readdirSync(reportsRoot) : [])
+          .map((d) => {
+            try {
+              const r = JSON.parse(readFileSync(join(reportsRoot, d, "report.json"), "utf8")) as Report;
+              return { dir: d, base: r.base.name, head: r.head.name, mode: r.mode, generatedAt: r.generatedAt, summary: r.summary, reasons: failureReasons(r) };
+            } catch {
+              return undefined;
+            }
+          })
+          .filter((x) => x !== undefined)
+          .sort((a, b) => b!.generatedAt.localeCompare(a!.generatedAt));
+        return void send(res, 200, list);
       }
       if (u.pathname === "/api/init" && req.method === "POST") {
         const b = await body(req);
-        return void send(res, 200, initProject(appDir, { framework: String(b.framework ?? "other") as never, force: false }));
+        return void send(res, 200, initProject(appDir, { framework: String(b.framework ?? "other") as never, force: !!b.force }));
       }
       if (u.pathname === "/api/validate" && req.method === "POST") {
         const issues = validateCatalogDir(appDir);
@@ -158,7 +185,7 @@ export async function startUi(appDir: string, port = 0): Promise<UiServer> {
         const b = await body(req);
         const job = start("compare", async (log) => {
           const r = await runCompare({ appDir, base: { label: String(b.base), ref: String(b.base) }, head: { label: String(b.head), ref: String(b.head) }, mode: b.mode === "flow-audit" ? "flow-audit" : "restyle", log });
-          return { summary: r.report.summary, dir: r.dir.split(sep).pop() };
+          return { summary: r.report.summary, dir: r.dir.split(sep).pop(), reasons: failureReasons(r.report) };
         });
         return void send(res, 200, { job: job.id });
       }

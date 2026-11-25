@@ -1,14 +1,22 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>chip-chop</title><link rel="stylesheet" href="style.css"></head>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>chip-chop</title><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>chip-chop</h1><span id="app" class="mut"></span>
-<nav><button data-tab="project" class="on">Project</button><button data-tab="ai">AI</button><button data-tab="run">Run</button><button data-tab="reports">Reports</button></nav></header>
+<header class="top"><div class="top-in">
+<img src="favicon.svg" width="38" height="38" alt="">
+<strong class="brand">chip-chop</strong>
+<span id="app" class="path"></span>
+<nav aria-label="Secciones" id="tabs">
+<button data-tab="proyecto" class="on">Proyecto</button><button data-tab="ia">IA</button><button data-tab="comparar">Comparar</button><button data-tab="informes">Informes</button>
+</nav>
+<button id="ver" class="ver" data-tab="actualizar">v…</button>
+</div></header>
 <main>
-<section id="project" class="tab"></section>
-<section id="ai" class="tab" hidden></section>
-<section id="run" class="tab" hidden></section>
-<section id="reports" class="tab" hidden></section>
-<pre id="log" aria-live="polite"></pre>
+<div id="banner" hidden></div>
+<section id="proyecto" class="tab"></section>
+<section id="ia" class="tab" hidden></section>
+<section id="comparar" class="tab" hidden></section>
+<section id="informes" class="tab" hidden></section>
+<section id="actualizar" class="tab" hidden></section>
 </main>
 <script src="app.js"></script></body></html>
