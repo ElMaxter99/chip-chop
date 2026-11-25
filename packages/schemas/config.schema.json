@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chip-chop:schema:config",
+  "title": "chip-chop config",
+  "description": "Per-app configuration, stored at <app>/.chipchop/config.yaml. Tells the engine how to build, serve and capture the app.",
+  "type": "object",
+  "required": ["app", "framework", "serve"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "app": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable app name, used in reports."
+    },
+    "framework": {
+      "enum": ["angularjs", "angular", "react", "other"],
+      "description": "Selects the guide an AI follows to read the source code. The engine itself is framework-agnostic."
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How to build one git ref. Skipped when --base-url is passed on the CLI.",
+      "properties": {
+        "install": { "type": "string", "description": "e.g. npm ci" },
+        "command": { "type": "string", "description": "e.g. npm run build" },
+        "cwd": { "type": "string", "default": "." },
+        "nodeVersion": { "type": "string", "description": "Node version needed to build legacy apps, e.g. 14" }
+      }
+    },
+    "serve": {
+      "type": "object",
+      "required": ["command", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string", "description": "Command that serves the built app. May use {port}." },
+        "url": { "type": "string", "format": "uri", "description": "Base URL once running, e.g. http://localhost:4200. May use {port}." },
+        "readyPath": { "type": "string", "default": "/" },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "default": 120000 }
+      }
+    },
+    "viewports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "width", "height"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "width": { "type": "integer", "minimum": 200 },
+          "height": { "type": "integer", "minimum": 200 }
+        }
+      },
+      "default": [{ "name": "desktop", "width": 1440, "height": 900 }]
+    },
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Everything that is frozen so two runs of the same code produce the same pixels.",
+      "properties": {
+        "fixedTime": { "type": "string", "format": "date-time", "default": "2026-01-15T10:00:00Z" },
+        "timezone": { "type": "string", "default": "UTC" },
+        "locale": { "type": "string", "default": "en-US" },
+        "disableAnimations": { "type": "boolean", "default": true },
+        "randomSeed": { "type": "integer", "default": 1 }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Login is always mocked: no real credentials are ever used.",
+      "properties": {
+        "mode": { "enum": ["mocked", "storage", "none"], "default": "mocked" },
+        "mock": { "type": "string", "description": "Mock id that answers the login request(s), e.g. auth/login-ok." },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Pre-seeded browser storage so protected routes open already authenticated.",
+          "properties": {
+            "localStorage": { "type": "object", "additionalProperties": { "type": "string" } },
+            "sessionStorage": { "type": "object", "additionalProperties": { "type": "string" } },
+            "cookies": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "value"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "value": { "type": "string" },
+                  "path": { "type": "string", "default": "/" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "externalAssets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What to do with images, fonts and scripts hosted outside the app.",
+      "properties": {
+        "mode": {
+          "enum": ["placeholder", "download", "block"],
+          "default": "placeholder",
+          "description": "placeholder: serve a generated image of the same size; download: fetch once into assets/ and replay; block: abort the request."
+        },
+        "defaultSize": {
+          "type": "object",
+          "properties": {
+            "width": { "type": "integer", "default": 300 },
+            "height": { "type": "integer", "default": 200 }
+          }
+        },
+        "sizes": {
+          "type": "array",
+          "description": "Known dimensions for specific external images (e.g. a 1500x80 banner).",
+          "items": {
+            "type": "object",
+            "required": ["match", "width", "height"],
+            "additionalProperties": false,
+            "properties": {
+              "match": { "type": "string", "description": "URL glob, e.g. **/banner.png" },
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Default readiness rule before a state is captured. States can override it.",
+      "properties": {
+        "networkIdleMs": { "type": "integer", "minimum": 0, "default": 500 },
+        "settleMs": { "type": "integer", "minimum": 0, "default": 200 }
+      }
+    },
+    "compare": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pixelThreshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.1 },
+        "maxDiffPixelRatio": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 },
+        "ignoreAntialiasing": { "type": "boolean", "default": true },
+        "structural": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Which non-visual signals must match between refs.",
+          "properties": {
+            "aria": { "type": "boolean", "default": true },
+            "requests": { "type": "boolean", "default": true },
+            "consoleErrors": { "type": "boolean", "default": true }
+          }
+        }
+      }
+    }
+  }
+}

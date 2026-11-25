@@ -1,0 +1,43 @@
+# .chipchop/states.yaml
+# Every capturable state of the app. Pages are reached by URL; modals, drawers
+# and tabs are reached from another state.
+states:
+  - id: login
+    title: Login
+    kind: page
+    route: /#!/login
+    mocks: [auth/login-ok]
+    source: { file: src/app/login/login.route.js, symbol: LoginController }
+
+  - id: home
+    title: Home
+    kind: page
+    route: /#!/home
+    mocks: [home/summary]
+    mask:
+      - { selector: ".clock" }          # shows the current time
+    source: { file: src/app/home/home.route.js }
+
+  - id: passwords
+    title: Password list
+    kind: page
+    route: /#!/passwords
+    mocks: [passwords/list-with-data]
+    ready:
+      visible: { role: table }
+    source: { file: src/app/passwords/passwords.route.js }
+
+  - id: passwords-empty
+    title: Password list, no data
+    kind: page
+    route: /#!/passwords
+    mocks: [passwords/list-empty]
+
+  - id: passwords-delete-modal
+    title: Delete confirmation modal
+    kind: modal
+    opensFrom: passwords
+    via:
+      - click: { role: button, name: "Delete" }
+    description: Asks for confirmation before deleting a password.
+    source: { file: src/app/passwords/delete-modal.html }

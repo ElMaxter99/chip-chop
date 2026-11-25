@@ -1,0 +1,59 @@
+# Reusable workflow: compare two refs of an app and upload the report.
+#
+# Usage from another repository:
+#
+#   jobs:
+#     ui-compare:
+#       uses: <owner>/chip-chop/.github/workflows/compare.yml@main
+#       with:
+#         base: develop
+#         head: ${{ github.head_ref }}
+#
+# Status: skeleton. It starts working once `chip-chop compare` is implemented.
+name: Compare refs
+
+on:
+  workflow_call:
+    inputs:
+      base:
+        description: Baseline git ref (branch, tag or SHA)
+        required: true
+        type: string
+      head:
+        description: Ref to audit against the baseline
+        required: true
+        type: string
+      app-dir:
+        description: Folder that contains the .chipchop directory
+        required: false
+        default: "."
+        type: string
+      node-version:
+        description: Node version used to build the audited app
+        required: false
+        default: "22"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      - run: npx playwright install --with-deps chromium
+      - name: Capture and compare
+        working-directory: ${{ inputs.app-dir }}
+        run: |
+          npx chip-chop compare "${{ inputs.base }}" "${{ inputs.head }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chip-chop-report
+          path: ${{ inputs.app-dir }}/.chipchop/reports/

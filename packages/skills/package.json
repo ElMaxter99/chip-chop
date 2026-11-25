@@ -1,0 +1,13 @@
+{
+  "name": "chip-chop-skills",
+  "version": "0.0.0",
+  "description": "AI-facing instructions for chip-chop: SKILL.md plus per-framework guides (AngularJS, Angular, React).",
+  "license": "MIT",
+  "files": [
+    "SKILL.md",
+    "guides"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

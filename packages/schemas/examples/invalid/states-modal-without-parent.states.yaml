@@ -1,0 +1,5 @@
+# MUST FAIL: a modal must say which state it opens from.
+states:
+  - id: lonely-modal
+    title: Lonely modal
+    kind: modal

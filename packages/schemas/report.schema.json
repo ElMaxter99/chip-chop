@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chip-chop:schema:report",
+  "title": "chip-chop comparison report",
+  "description": "Machine-readable result of comparing two refs. The HTML and Markdown reports are rendered from this file.",
+  "type": "object",
+  "required": ["app", "base", "head", "mode", "generatedAt", "summary", "states"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "app": { "type": "string" },
+    "base": { "$ref": "#/$defs/ref" },
+    "head": { "$ref": "#/$defs/ref" },
+    "mode": {
+      "enum": ["restyle", "flow-audit"],
+      "description": "restyle: only pixels may change. flow-audit: states may also be added, removed or moved."
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "summary": {
+      "type": "object",
+      "required": ["identical", "visualOnly", "structural", "added", "removed", "failed"],
+      "additionalProperties": false,
+      "properties": {
+        "identical": { "type": "integer", "minimum": 0 },
+        "visualOnly": { "type": "integer", "minimum": 0 },
+        "structural": { "type": "integer", "minimum": 0 },
+        "added": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "states": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/stateResult" }
+    },
+    "unmockedRequests": {
+      "type": "array",
+      "description": "Requests a ref made that no mock answered. Always a finding.",
+      "items": {
+        "type": "object",
+        "required": ["ref", "state", "method", "url"],
+        "properties": {
+          "ref": { "enum": ["base", "head"] },
+          "state": { "type": "string" },
+          "method": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    },
+    "flowGraph": {
+      "type": "object",
+      "description": "Differences between the state graphs of the two refs.",
+      "additionalProperties": false,
+      "properties": {
+        "addedStates": { "type": "array", "items": { "type": "string" } },
+        "removedStates": { "type": "array", "items": { "type": "string" } },
+        "addedTransitions": { "type": "array", "items": { "$ref": "#/$defs/edge" } },
+        "removedTransitions": { "type": "array", "items": { "$ref": "#/$defs/edge" } }
+      }
+    }
+  },
+  "$defs": {
+    "ref": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "commit": { "type": "string" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "via": { "type": "string" }
+      }
+    },
+    "stateResult": {
+      "type": "object",
+      "required": ["id", "viewport", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "viewport": { "type": "string" },
+        "status": { "enum": ["identical", "visual-only", "structural", "added", "removed", "failed"] },
+        "visual": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "diffPixels": { "type": "integer", "minimum": 0 },
+            "diffRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+            "baseImage": { "type": "string" },
+            "headImage": { "type": "string" },
+            "diffImage": { "type": "string" }
+          }
+        },
+        "structural": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ariaChanged": { "type": "boolean" },
+            "requestsAdded": { "type": "array", "items": { "type": "string" } },
+            "requestsRemoved": { "type": "array", "items": { "type": "string" } },
+            "newConsoleErrors": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "error": { "type": "string" }
+      }
+    }
+  }
+}

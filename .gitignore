@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.DS_Store
+
+# chip-chop outputs generated inside audited apps (never commit these)
+.chipchop/runs/
+.chipchop/reports/

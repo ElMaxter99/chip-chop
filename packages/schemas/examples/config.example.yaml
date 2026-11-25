@@ -1,0 +1,46 @@
+# .chipchop/config.yaml  (example: an AngularJS app with hash routing)
+app: Password Vault
+framework: angularjs
+
+build:
+  nodeVersion: "14"        # legacy AngularJS builds often need an old Node
+  install: npm ci
+  command: npm run build
+
+serve:
+  command: npx http-server dist -p {port} -s
+  url: http://localhost:{port}
+  readyPath: /
+
+viewports:
+  - { name: desktop, width: 1440, height: 900 }
+  - { name: mobile, width: 390, height: 844 }
+
+determinism:
+  fixedTime: "2026-01-15T10:00:00Z"
+  timezone: UTC
+  locale: es-ES
+  disableAnimations: true
+  randomSeed: 1
+
+auth:
+  mode: mocked
+  mock: auth/login-ok
+  storage:
+    localStorage:
+      token: mock-token-123
+
+externalAssets:
+  mode: placeholder
+  defaultSize: { width: 300, height: 200 }
+  sizes:
+    - { match: "**/banner.png", width: 1500, height: 80 }
+
+compare:
+  pixelThreshold: 0.1
+  maxDiffPixelRatio: 0
+  ignoreAntialiasing: true
+  structural:
+    aria: true
+    requests: true
+    consoleErrors: true

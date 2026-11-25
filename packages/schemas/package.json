@@ -1,0 +1,20 @@
+{
+  "name": "chip-chop-schemas",
+  "version": "0.0.0",
+  "description": "JSON Schemas for chip-chop: config, states, flows, mocks and reports.",
+  "license": "MIT",
+  "files": [
+    "*.schema.json",
+    "examples"
+  ],
+  "exports": {
+    "./config.schema.json": "./config.schema.json",
+    "./states.schema.json": "./states.schema.json",
+    "./flow.schema.json": "./flow.schema.json",
+    "./mock.schema.json": "./mock.schema.json",
+    "./report.schema.json": "./report.schema.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

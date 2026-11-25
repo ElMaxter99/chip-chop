@@ -1,0 +1,9 @@
+{
+  "id": "bad/status",
+  "requests": [
+    {
+      "match": { "method": "FETCH", "url": "/api/x" },
+      "response": { "status": 999, "json": {} }
+    }
+  ]
+}

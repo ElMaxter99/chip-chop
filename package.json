@@ -1,0 +1,24 @@
+{
+  "name": "chip-chop-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Source-driven visual and flow auditing for web apps (Angular, AngularJS, React and more).",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "validate:schemas": "node scripts/validate-schemas.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "typescript": "^5.6.0",
+    "yaml": "^2.6.0"
+  }
+}

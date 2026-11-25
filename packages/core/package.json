@@ -1,0 +1,38 @@
+{
+  "name": "chip-chop",
+  "version": "0.0.0",
+  "description": "Capture every UI state of a web app on two git refs and compare them: pixels, accessibility tree, requests and flow graph.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "chip-chop": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "pixelmatch": "^6.0.0",
+    "playwright": "^1.50.0",
+    "pngjs": "^7.0.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
+    "typescript": "^5.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

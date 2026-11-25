@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chip-chop:schema:states",
+  "title": "chip-chop states catalog",
+  "description": "Catalog of every capturable UI state of an app, stored at <app>/.chipchop/states.yaml. A state is a route plus an optional overlay (modal, drawer, tab) plus a data scenario.",
+  "type": "object",
+  "required": ["states"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "states": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/state" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "target": {
+      "type": "object",
+      "description": "How to find an element. Prefer role+name: it survives CSS refactors.",
+      "minProperties": 1,
+      "maxProperties": 3,
+      "additionalProperties": false,
+      "properties": {
+        "role": { "type": "string" },
+        "name": { "type": "string" },
+        "text": { "type": "string" },
+        "testId": { "type": "string" },
+        "selector": { "type": "string" }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": ["id", "title", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "kind": {
+          "enum": ["page", "modal", "drawer", "tab", "state"],
+          "description": "page: reachable by URL. modal/drawer/tab/state: reached by interacting with another state."
+        },
+        "route": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Route of the page, or of the page the overlay opens over. Hash routes (AngularJS) are written as /#!/login."
+        },
+        "opensFrom": {
+          "$ref": "#/$defs/id",
+          "description": "For non-page kinds: the state that must be active first."
+        },
+        "via": {
+          "type": "array",
+          "description": "Steps from opensFrom to reach this state. Same vocabulary as flow steps.",
+          "items": { "type": "object" }
+        },
+        "mocks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Mock ids loaded before the state is captured."
+        },
+        "ready": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Override of the default readiness rule.",
+          "properties": {
+            "visible": { "$ref": "#/$defs/target" },
+            "networkIdleMs": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "mask": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/target" },
+          "description": "Regions painted over before the pixel diff (clocks, avatars, charts with random data)."
+        },
+        "viewports": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Subset of config viewports. Omit for all."
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Where in the source code this state is defined. Lets the AI keep the catalog in sync.",
+          "properties": {
+            "file": { "type": "string" },
+            "symbol": { "type": "string" }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "page" } } },
+          "then": { "required": ["route"] },
+          "else": { "required": ["opensFrom"] }
+        }
+      ]
+    }
+  }
+}

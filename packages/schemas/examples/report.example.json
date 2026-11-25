@@ -1,0 +1,48 @@
+{
+  "app": "Password Vault",
+  "base": { "name": "develop", "commit": "a1b2c3d" },
+  "head": { "name": "desarrollo-2", "commit": "e4f5a6b" },
+  "mode": "flow-audit",
+  "generatedAt": "2026-11-25T10:00:00Z",
+  "summary": { "identical": 3, "visualOnly": 0, "structural": 1, "added": 2, "removed": 0, "failed": 0 },
+  "states": [
+    {
+      "id": "login",
+      "viewport": "desktop",
+      "status": "identical",
+      "visual": { "diffPixels": 0, "diffRatio": 0 }
+    },
+    {
+      "id": "passwords",
+      "viewport": "desktop",
+      "status": "structural",
+      "visual": {
+        "diffPixels": 1840,
+        "diffRatio": 0.0014,
+        "baseImage": "runs/develop/passwords.desktop.png",
+        "headImage": "runs/desarrollo-2/passwords.desktop.png",
+        "diffImage": "reports/develop__vs__desarrollo-2/diff/passwords.desktop.png"
+      },
+      "structural": {
+        "ariaChanged": true,
+        "requestsAdded": ["GET /api/passwords/strength"],
+        "requestsRemoved": [],
+        "newConsoleErrors": []
+      }
+    },
+    { "id": "passwords-share-modal", "viewport": "desktop", "status": "added" },
+    { "id": "passwords-share-confirm", "viewport": "desktop", "status": "added" }
+  ],
+  "unmockedRequests": [
+    { "ref": "head", "state": "passwords", "method": "GET", "url": "/api/passwords/strength" }
+  ],
+  "flowGraph": {
+    "addedStates": ["passwords-share-modal", "passwords-share-confirm"],
+    "removedStates": [],
+    "addedTransitions": [
+      { "from": "passwords", "to": "passwords-share-modal", "via": "click Share" },
+      { "from": "passwords-share-modal", "to": "passwords-share-confirm", "via": "click Send" }
+    ],
+    "removedTransitions": []
+  }
+}

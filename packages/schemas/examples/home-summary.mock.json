@@ -1,0 +1,15 @@
+{
+  "$schema": "../mock.schema.json",
+  "id": "home/summary",
+  "description": "Numbers shown on the home dashboard.",
+  "scenario": "happy",
+  "generatedFrom": [
+    { "file": "src/app/home/home.service.js", "symbol": "HomeService.summary" }
+  ],
+  "requests": [
+    {
+      "match": { "method": "GET", "url": "/api/summary" },
+      "response": { "status": 200, "json": { "total": 3, "active": 2, "weak": 1 } }
+    }
+  ]
+}

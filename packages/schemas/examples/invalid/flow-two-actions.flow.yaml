@@ -1,0 +1,6 @@
+# MUST FAIL: a step has two actions.
+id: bad-flow
+title: Bad flow
+steps:
+  - goto: /#!/home
+    click: { role: button, name: "Go" }

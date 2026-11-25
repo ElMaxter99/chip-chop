@@ -1,0 +1,25 @@
+{
+  "$schema": "../mock.schema.json",
+  "id": "auth/login-ok",
+  "description": "Successful login. No real credentials are ever used.",
+  "scenario": "happy",
+  "generatedFrom": [
+    { "file": "src/app/auth/auth.service.js", "symbol": "AuthService.login" }
+  ],
+  "requests": [
+    {
+      "match": { "method": "POST", "url": "/api/login" },
+      "response": {
+        "status": 200,
+        "json": { "token": "mock-token-123", "user": { "id": 1, "name": "Ana Pérez", "isAdmin": false } }
+      }
+    },
+    {
+      "match": { "method": "GET", "url": "/api/me" },
+      "response": {
+        "status": 200,
+        "json": { "id": 1, "name": "Ana Pérez", "isAdmin": false }
+      }
+    }
+  ]
+}
