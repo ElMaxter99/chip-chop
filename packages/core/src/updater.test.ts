@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkForUpdate, compareVersions, pickRelease, platformAsset, type Release } from "./updater.js";
+import { checkForUpdate, compareVersions, pickRelease, platformAsset, releasesUrl, REPO, type Release } from "./updater.js";
 
 const rel = (tag: string, pre = false, draft = false): Release => ({
   tag_name: tag,
@@ -45,4 +45,10 @@ test("checkForUpdate: available, current and per-platform asset", async () => {
 test("macOS picks the -macos.tar.gz asset (sin validar en un Mac real)", async () => {
   const r = await checkForUpdate({ channel: "stable", current: "0.1.1", releases: [rel("v0.2.0")], platform: "darwin" });
   assert.equal(r.asset, "chip-chop-0.2.0-macos.tar.gz");
+});
+
+test("CHIPCHOP_RELEASES_URL overrides the releases API (tests only); empty means GitHub", () => {
+  assert.equal(releasesUrl({}), `https://api.github.com/repos/${REPO}/releases?per_page=50`);
+  assert.equal(releasesUrl({ CHIPCHOP_RELEASES_URL: "" }), releasesUrl({}));
+  assert.equal(releasesUrl({ CHIPCHOP_RELEASES_URL: "http://127.0.0.1:1234/releases" }), "http://127.0.0.1:1234/releases");
 });

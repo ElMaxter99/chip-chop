@@ -65,7 +65,7 @@ interface Parsed {
 function parse(argv: string[]): Parsed {
   const pos: string[] = [];
   const o: Record<string, string | boolean> = {};
-  const flags = new Set(["force", "reuse", "no-install", "keep-worktree", "headed", "dry-run", "no-open", "help"]);
+  const flags = new Set(["force", "reuse", "no-install", "keep-worktree", "headed", "dry-run", "no-open", "check", "help"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a.startsWith("--")) {

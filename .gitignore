@@ -16,3 +16,4 @@ packages/core/ui/fonts/
 desktop/app-core/
 desktop/node_modules/
 release/
+.e2e-update-*/

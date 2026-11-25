@@ -105,12 +105,17 @@ export function currentVersion(): string {
 
 // ---------- check and install ----------
 
+/** URL de la API de releases. `CHIPCHOP_RELEASES_URL` la sustituye (SOLO para pruebas: e2e contra un servidor local). */
+export function releasesUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CHIPCHOP_RELEASES_URL?.trim() || `https://api.github.com/repos/${REPO}/releases?per_page=50`;
+}
+
 export async function fetchReleases(): Promise<Release[]> {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=50`, {
+  const res = await fetch(releasesUrl(), {
     headers: { accept: "application/vnd.github+json", "user-agent": "chip-chop-updater" },
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`GitHub answered ${res.status} while listing releases`);
+  if (!res.ok) throw new Error(`the releases server answered ${res.status} while listing releases`);
   return (await res.json()) as Release[];
 }
 
