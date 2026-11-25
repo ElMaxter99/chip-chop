@@ -39,6 +39,8 @@ export interface UiServer {
 /** Hooks para quien incrusta la app (la de escritorio sustituye la instalación de actualizaciones por la suya). */
 export interface UiOptions {
   installUpdate?: (log: (l: string) => void) => Promise<unknown>;
+  /** Avisa de que un trabajo en segundo plano (capture, compare, ai, update) empieza o termina. */
+  onJob?: (e: { title: string; state: "start" | "done" | "failed" }) => void;
 }
 
 export async function startUi(appDir: string, port = 0, options: UiOptions = {}): Promise<UiServer> {
@@ -64,6 +66,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
     const job: Job = { id: randomBytes(4).toString("hex"), title, status: "running", lines: [], listeners: new Set() };
     jobs.set(job.id, job);
     current = job;
+    options.onJob?.({ title, state: "start" });
     fn((l) => emit(job, l))
       .then((r) => {
         job.result = r;
@@ -74,6 +77,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
         job.status = "failed";
       })
       .finally(() => {
+        options.onJob?.({ title, state: job.status === "done" ? "done" : "failed" });
         for (const l of job.listeners) {
           l.write(`event: end\ndata: ${JSON.stringify(job.status)}\n\n`);
           l.end();

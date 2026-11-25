@@ -162,5 +162,17 @@
     renderBrowser(); renderProjects(); renderAi(); renderSettings(); show(tab);
     if (!S.smoke && !S.chromium.installed && !installingChromium && !chromiumFailed && !autoTried) { autoTried = true; startChromium(); }
   }
+  // Arrastrar una carpeta sobre la ventana la añade y la abre.
+  var dragDepth = 0;
+  function dropHint(on) { document.body.classList.toggle("dropping", on); }
+  window.addEventListener("dragenter", function (e) { e.preventDefault(); dragDepth++; dropHint(true); });
+  window.addEventListener("dragleave", function () { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropHint(false); });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault(); dragDepth = 0; dropHint(false);
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    var p = f && api.pathForFile(f);
+    if (p) api.invoke("home:dropProject", p).catch(fail);
+  });
   load().catch(fail);
 })();

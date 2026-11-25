@@ -27,6 +27,7 @@ body{visibility:hidden}
 a:focus-visible,summary:focus-visible,.radio:focus-within,main:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
 nav [role=tab]:focus-visible,.ver:focus-visible{outline:3px solid var(--sf);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+body.dropping::after{content:"Suelta la carpeta de tu app para añadirla";position:fixed;inset:12px;z-index:10;display:grid;place-items:center;border:4px dashed var(--ac);border-radius:12px;background:rgba(241,223,184,.92);font:800 22px "Bricolage Grotesque",sans-serif;color:var(--ink)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 </style>
 </head>

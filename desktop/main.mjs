@@ -1,7 +1,7 @@
 // Chip Chop · proceso principal de Electron. Abre siempre la pantalla de Inicio (proyectos, IA, ajustes y
 // actualizaciones); al abrir un proyecto arranca la app local de chip-chop (la misma que `chip-chop ui`) dentro de este
 // proceso y la muestra en la misma ventana. Sin Node ni terminal.
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, screen, shell } from "electron";
 import electronUpdater from "electron-updater";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -27,6 +27,73 @@ let win = null;
 let ui = null;
 let core = null;
 let installingChromium = false;
+let runningJobs = 0;
+
+// ───────── Ventana: recordar tamaño y posición ─────────
+function restoredBounds() {
+  const b = readState().window;
+  const def = { width: 1280, height: 860 };
+  if (!b || !Number.isFinite(b.width) || !Number.isFinite(b.height)) return def;
+  const out = { width: Math.max(900, b.width), height: Math.max(600, b.height) };
+  if (Number.isFinite(b.x) && Number.isFinite(b.y)) {
+    // solo se restaura la posición si sigue cayendo dentro de alguna pantalla (por si se desconectó un monitor)
+    const visible = screen.getAllDisplays().some((d) => b.x >= d.bounds.x - 50 && b.y >= d.bounds.y - 50 && b.x < d.bounds.x + d.bounds.width - 100 && b.y < d.bounds.y + d.bounds.height - 100);
+    if (visible) Object.assign(out, { x: b.x, y: b.y });
+  }
+  return { ...out, maximized: Boolean(b.maximized) };
+}
+let saveTimer = null;
+function saveWindowState() {
+  if (!win || win.isDestroyed()) return;
+  const maximized = win.isMaximized();
+  const b = maximized ? readState().window ?? win.getNormalBounds() : win.getNormalBounds();
+  writeState({ window: { x: b.x, y: b.y, width: b.width, height: b.height, maximized } });
+}
+const saveWindowSoon = () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveWindowState, 400);
+};
+
+// ───────── Avisos del sistema al terminar un trabajo largo ─────────
+const JOB_NAMES = { capture: "La captura", compare: "La comparación", ai: "La generación con IA" };
+function onJob({ title, state }) {
+  if (state === "start") return void runningJobs++;
+  runningJobs = Math.max(0, runningJobs - 1);
+  const name = JOB_NAMES[title];
+  if (!name || !Notification.isSupported() || (win && !win.isDestroyed() && win.isFocused())) return;
+  const n = new Notification({ title: state === "done" ? `${name} ha terminado` : `${name} ha fallado`, body: state === "done" ? "Vuelve a Chip Chop para ver el resultado." : "Abre Chip Chop para ver el error.", silent: false });
+  n.on("click", () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+  n.show();
+}
+
+// ───────── Abrir una carpeta desde la línea de comandos o arrastrándola ─────────
+const isDir = (p) => {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
+function folderFromArgs(argv, cwd) {
+  const args = argv.slice(app.isPackaged ? 1 : 2).filter((a) => a && !a.startsWith("-"));
+  for (const a of args) {
+    const p = path.resolve(cwd || process.cwd(), a);
+    if (isDir(p)) return p;
+  }
+  return null;
+}
+async function openFolder(dir) {
+  try {
+    await openProject(dir);
+  } catch (e) {
+    dialog.showErrorBox("No se pudo abrir la carpeta", String(e?.message || e));
+  }
+}
 
 // ───────── Estado guardado (lista de proyectos) ─────────
 const readState = () => {
@@ -105,7 +172,7 @@ function installChromium() {
 async function openProject(appDir, tab) {
   if (!chromiumInstalled()) throw new Error("Falta el navegador de capturas: espera a que termine la descarga.");
   if (ui) await ui.close().catch(() => {});
-  ui = await core.startUi(appDir, 0, { installUpdate });
+  ui = await core.startUi(appDir, 0, { installUpdate, onJob });
   const list = projects().filter((p) => p.path !== appDir);
   list.unshift({ path: appDir, lastOpened: Date.now() });
   saveProjects(list);
@@ -131,7 +198,8 @@ async function goHome() {
 }
 
 function createWindow() {
-  win = new BrowserWindow({ width: 1280, height: 860, minWidth: 900, minHeight: 600, backgroundColor: "#F1DFB8", title: "Chip Chop", icon: path.join(here, "build", "icon.png"), webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(here, "preload.cjs") } });
+  const rb = restoredBounds();
+  win = new BrowserWindow({ width: rb.width, height: rb.height, ...(rb.x !== undefined ? { x: rb.x, y: rb.y } : {}), minWidth: 900, minHeight: 600, backgroundColor: "#F1DFB8", title: "Chip Chop", icon: path.join(here, "build", "icon.png"), webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(here, "preload.cjs") } });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(HOME_GO)) {
       goHome();
@@ -152,6 +220,15 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => {
     if (!ui || !win.webContents.getURL().startsWith(new URL(ui.url).origin)) return;
     win.webContents.executeJavaScript(`(function(){var t=document.querySelector('.top-in');if(!t||document.getElementById('cc-home'))return;var b=document.createElement('button');b.id='cc-home';b.className='ver';b.textContent='‹ Inicio';b.onclick=function(){window.open('${HOME_GO}//go')};t.prepend(b)})()`).catch(() => {});
+  });
+  if (rb.maximized) win.maximize();
+  for (const ev of ["resize", "move", "maximize", "unmaximize"]) win.on(ev, saveWindowSoon);
+  win.on("close", (e) => {
+    saveWindowState();
+    if (runningJobs > 0 && process.env.CHIPCHOP_SMOKE !== "1") {
+      const r = dialog.showMessageBoxSync(win, { type: "warning", buttons: ["Seguir esperando", "Cerrar y cancelar"], defaultId: 0, cancelId: 0, title: "Hay un trabajo en marcha", message: "Hay una captura, comparación o generación en curso.", detail: "Si cierras ahora se cancelará y tendrás que repetirla." });
+      if (r === 0) e.preventDefault();
+    }
   });
   win.on("closed", () => (win = null));
 }
@@ -313,6 +390,11 @@ function registerIpc() {
     return openProject(dir, "informes");
   });
   ipcMain.handle("home:initProject", (_e, dir, framework) => initProjectIn(String(dir), framework === undefined ? undefined : String(framework)));
+  ipcMain.handle("home:dropProject", async (_e, dir) => {
+    if (typeof dir !== "string" || !isDir(dir)) throw new Error("Eso no es una carpeta: arrastra la carpeta de tu app, no un archivo.");
+    await openProject(dir);
+    return dir;
+  });
   ipcMain.handle("home:removeProject", (_e, dir) => saveProjects(projects().filter((p) => p.path !== dir)));
   ipcMain.handle("home:checkUpdate", () => core.checkForUpdate().catch((e) => ({ error: e.message, channel: core.getChannel(), available: false })));
   ipcMain.handle("home:installUpdate", () => installUpdate(send));
@@ -337,7 +419,9 @@ function buildMenu() {
   );
 }
 
-app.on("second-instance", () => {
+app.on("second-instance", (_e, argv, cwd) => {
+  const dir = folderFromArgs(argv, cwd);
+  if (dir && core) openFolder(dir);
   if (win) {
     if (win.isMinimized()) win.restore();
     win.focus();
