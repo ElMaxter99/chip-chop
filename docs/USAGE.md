@@ -66,7 +66,7 @@ Prompts can be replaced with `settings.promptsDir` (`discover.md`, `flows.md`, `
 
 Honest list, as of v0.1:
 
-- **Tested for real:** capture and compare on the bundled demo app with Chromium (restyle, and a new modal
+- **Tested for real:** the end-to-end tests also pass in GitHub Actions with the real `pngjs`, `pixelmatch` and a clean `npm install`. They cover capture and compare on the bundled demo app with Chromium (restyle, and a new modal
   detected as added), the CLI commands, the local server (auth token, host check, report serving), schema
   validation, mock matching, AI argument building and the repair loop (with a fake CLI).
 - **Not tested here:** the Claude CLI end to end (it was not signed in where this was built), the Copilot CLI
