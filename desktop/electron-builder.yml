@@ -42,6 +42,8 @@ mac:
     - zip
   notarize: false
 linux:
+  # Carpeta con varios tamaños (16…512): Ubuntu/GNOME no muestra un único icono de 1024 px en el lanzador ni en la barra.
+  icon: build/icons
   syncDesktopName: true
   category: Development
   target:

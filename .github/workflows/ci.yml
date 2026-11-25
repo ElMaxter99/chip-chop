@@ -122,5 +122,8 @@ jobs:
           sudo apt-get update && sudo apt-get install -y rpm
           npx electron-builder --projectDir desktop --linux deb rpm --publish never
           ls release/*.deb release/*.rpm
+          # el lanzador de Ubuntu necesita iconos de varios tamaños (no solo uno de 1024 px)
+          n=$(dpkg-deb -c release/*.deb | grep -cE 'icons/hicolor/(16x16|32x32|48x48|128x128|256x256|512x512)/apps/.*\.png')
+          test "$n" -ge 6 || { echo "::error::el .deb solo trae $n tamaños de icono"; exit 1; }
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
