@@ -130,7 +130,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Instaladores
-        run: npx electron-builder --publish never
+        run: npx electron-builder --projectDir desktop --publish never
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

@@ -21,12 +21,13 @@
     "changelog:release": "node scripts/changelog.mjs release",
     "release:notes": "node scripts/release-notes.mjs",
     "desktop:prepare": "node desktop/prepare-core.mjs",
-    "desktop:pack": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && cd desktop && npx electron-builder --dir --publish never",
-    "desktop:dist": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && cd desktop && npx electron-builder --publish never"
+    "desktop:pack": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && npx electron-builder --projectDir desktop --dir --publish never",
+    "desktop:dist": "npm run build && node desktop/prepare-core.mjs && npm install --prefix desktop --no-audit --no-fund && npx electron-builder --projectDir desktop --publish never"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
     "typescript": "^5.6.0",
-    "yaml": "^2.6.0"
+    "yaml": "^2.6.0",
+    "electron-builder": "^26.18.0"
   }
 }

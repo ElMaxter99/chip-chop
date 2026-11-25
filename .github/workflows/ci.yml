@@ -100,8 +100,7 @@ jobs:
       - run: npm install --no-audit --no-fund
         working-directory: desktop
       - name: Empaquetar (sin instalador)
-        run: npx electron-builder --dir --publish never
-        working-directory: desktop
+        run: npx electron-builder --projectDir desktop --dir --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - run: node desktop/verify-pack.mjs
@@ -115,8 +114,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y rpm
-          npx electron-builder --linux deb rpm --publish never
-          ls ../release/*.deb ../release/*.rpm
-        working-directory: desktop
+          npx electron-builder --projectDir desktop --linux deb rpm --publish never
+          ls release/*.deb release/*.rpm
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
