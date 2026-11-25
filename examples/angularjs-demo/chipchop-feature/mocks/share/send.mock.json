@@ -1,0 +1,10 @@
+{
+  "id": "share/send",
+  "scenario": "happy",
+  "requests": [
+    {
+      "match": { "method": "POST", "url": "/api/share", "bodyContains": { "id": 1, "recipient": "Luis" } },
+      "response": { "status": 200, "json": { "shared": true } }
+    }
+  ]
+}

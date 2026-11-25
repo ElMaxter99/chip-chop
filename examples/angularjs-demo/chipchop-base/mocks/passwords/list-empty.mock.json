@@ -1,0 +1,10 @@
+{
+  "id": "passwords/list-empty",
+  "scenario": "empty",
+  "requests": [
+    {
+      "match": { "method": "GET", "url": "/api/passwords" },
+      "response": { "status": 200, "json": [] }
+    }
+  ]
+}

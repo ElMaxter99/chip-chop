@@ -1,0 +1,10 @@
+{
+  "id": "passwords/delete",
+  "scenario": "happy",
+  "requests": [
+    {
+      "match": { "method": "DELETE", "url": "/api/passwords/:id" },
+      "response": { "status": 200, "json": { "deleted": true } }
+    }
+  ]
+}

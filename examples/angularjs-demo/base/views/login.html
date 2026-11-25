@@ -1,0 +1,7 @@
+<h2>Sign in</h2>
+<form name="loginForm" ng-submit="vm.submit()" novalidate>
+  <label>User <input name="user" ng-model="vm.user" aria-label="User" required></label>
+  <label>Password <input name="pass" type="password" ng-model="vm.pass" aria-label="Password" required></label>
+  <p class="error" role="alert" ng-if="vm.error">{{ vm.error }}</p>
+  <button type="submit" ng-disabled="loginForm.$invalid">Sign in</button>
+</form>

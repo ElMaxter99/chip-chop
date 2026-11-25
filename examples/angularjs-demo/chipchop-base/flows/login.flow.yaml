@@ -1,0 +1,12 @@
+id: login
+title: Sign in with the form
+mocks: [auth/login-ok, home/summary]
+steps:
+  - goto: /#!/login
+  - capture: login
+  - fill: { target: { role: textbox, name: "User" }, value: "ana" }
+  - fill: { target: { selector: "input[name=pass]" }, value: "secret" }
+  - click: { role: button, name: "Sign in" }
+  - wait:
+      visible: { selector: ".stats" }
+  - capture: home

@@ -1,0 +1,10 @@
+{
+  "id": "auth/login-ok",
+  "scenario": "happy",
+  "requests": [
+    {
+      "match": { "method": "POST", "url": "/api/login", "bodyContains": { "user": "ana" } },
+      "response": { "status": 200, "json": { "token": "demo-token" } }
+    }
+  ]
+}
