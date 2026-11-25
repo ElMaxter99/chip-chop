@@ -59,7 +59,21 @@ export function listRefs(appDir: string): { branches: string[]; tags: string[]; 
   };
 }
 
-export function freePort(): Promise<number> {
+const usedPorts = new Set<number>();
+
+/** A free port that this process has not handed out before (a just-killed server may still hold the old one). */
+export async function freePort(): Promise<number> {
+  for (let i = 0; i < 20; i++) {
+    const p = await probePort();
+    if (!usedPorts.has(p)) {
+      usedPorts.add(p);
+      return p;
+    }
+  }
+  throw new Error("could not find an unused port");
+}
+
+function probePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
     srv.once("error", reject);
@@ -102,17 +116,22 @@ export function runShell(command: string, cwd: string, log: (l: string) => void)
   });
 }
 
-function killTree(child: ChildProcess): void {
-  if (child.pid === undefined) return;
-  try {
-    if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
-    } else {
-      process.kill(-child.pid, "SIGTERM");
+function killTree(child: ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    if (child.pid === undefined) return resolve();
+    try {
+      if (process.platform === "win32") {
+        const k = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+        k.on("close", () => resolve());
+        k.on("error", () => resolve());
+      } else {
+        process.kill(-child.pid, "SIGTERM");
+        resolve();
+      }
+    } catch {
+      resolve(); // already gone
     }
-  } catch {
-    /* already gone */
-  }
+  });
 }
 
 async function waitForUrl(url: string, timeoutMs: number, child?: ChildProcess): Promise<void> {
@@ -167,7 +186,7 @@ export async function prepareTarget(opts: PrepareOptions): Promise<PreparedTarge
 
   let server: ChildProcess | undefined;
   const cleanup = async (): Promise<void> => {
-    if (server) killTree(server);
+    if (server) await killTree(server);
     if (!opts.keepWorktree) {
       try {
         git(gitRoot, ["worktree", "remove", "--force", worktree]);
