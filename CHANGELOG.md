@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [v0.4.4](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.4) - 2026-11-25
+### Added
+- **Funciones propias de una app de escritorio:** recuerda el tamaño y la posición de la ventana (y si estaba maximizada); avisa con una notificación del sistema cuando termina o falla una captura, comparación o generación con IA si la ventana no está al frente; se puede arrastrar la carpeta de una app sobre el Inicio para añadirla y abrirla; acepta la carpeta como argumento (`"Chip Chop.exe" C:\ruta\app`, también con la app ya abierta); y pregunta antes de cerrar si hay un trabajo en marcha.
+- **IA: detección de herramientas, modelos en lista y Codex:** chip-chop encuentra Claude Code, Copilot y Codex aunque no estén en el PATH de la app (PATH del sistema en Windows, `~/.local/bin`, npm global, winget, nvm, shell de login), muestra dónde están, ofrece una lista de modelos por herramienta (la de Copilot se lee de `copilot help`) con «Otro…», y añade OpenAI Codex como proveedor (`codex exec`).
+
+### Changed
+- **Interfaz más cuidada:** pasos de «Preparar la app» alineados, cabecera en una sola fila, diálogos propios en vez de los del sistema con mensajes en español, panel de progreso al actualizar (fases, barra, tiempo y detalle), barras de desplazamiento con el estilo de la app y la app de escritorio sin barra de menú nativa en Windows y Linux (se muestra con Alt).
+- **README completo con flujo, guía y capturas:** instalación por sistema, flujo de trabajo, guía paso a paso con capturas reales de la interfaz, canales de actualización, preguntas frecuentes y estado de pruebas. `npm run docs:check` vigila enlaces y capturas, y el workflow «Docs screenshots» las regenera.
+
 ## [v0.4.3](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.3) - 2026-11-25
 ### Added
 - **AngularJS: espera a que la app esté estable y demo propia:** antes de cada captura (y tras cada paso de un flujo) chip-chop espera a que AngularJS 1.x termine sus `$http`, plantillas de ruta y `$timeout` (máx. 5 s), así las cadenas `ngRoute` / `ui-router` no se capturan a medias en «Loading…». Las animaciones se congelan desde el primer pintado, no solo justo antes de la captura. Nueva demo `examples/angularjs-demo` (AngularJS 1.8 desde npm) con su `.chipchop/` y un e2e en CI.
