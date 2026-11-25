@@ -76,7 +76,7 @@ Comprueba que todo está bien con `chip-chop doctor` (o en **Ajustes** de la app
 
 ### 0. Abre la app
 
-La primera vez la app te hace una **configuración inicial**: descarga el navegador de capturas (con su progreso) y te pide elegir tu herramienta de IA y el modelo de cada etapa. Se guarda sola y, cuando todo está bien, pulsas **Empezar** (o «Configurar la IA más tarde»).
+La primera vez la app te hace una **configuración inicial**: descarga el navegador de capturas (con su progreso) y te deja la IA ya configurada: si lo guardado no se puede usar, elige la primera herramienta que tengas instalada y pone su configuración básica en las cuatro etapas (Claude: Sonnet para descubrir, mocks y reparar y Haiku para flujos; Copilot: el modelo económico de su lista para flujos y el predeterminado en el resto; Codex: el de tu `~/.codex/config.toml`). Tú solo ves que el navegador se descarga y qué modelo tiene cada fase, y puedes cambiarlo o pulsar «Usar …» para otra herramienta. Se guarda sola y, cuando todo está bien, pulsas **Empezar** (o «Configurar la IA más tarde»).
 
 ![Configuración inicial](docs/screenshots/home-configuracion-inicial.png)
 

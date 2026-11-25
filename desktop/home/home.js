@@ -243,13 +243,36 @@
     var chrom = c.installed ? badge("Listo", "ok") : installingChromium ? '<div><b><span class="spin"></span>Descargando el navegador de capturas…</b><div class="small mut">Chip Chop usa su propio Chromium para fotografiar tu app sin tocar tu navegador. Se descarga una sola vez (unos 150 MB) y puede tardar un par de minutos.</div><pre class="log" id="chromiumLog" style="margin-top:8px">' + esc(chromiumLog) + '</pre></div>' : chromiumFailed ? '<div class="banner er"><div class="grow"><b>No se pudo descargar el navegador</b><div class="small">Comprueba la conexión (o el proxy) y reintenta.</div></div><button class="btn p" id="dlChromium">Reintentar</button></div>' : badge("Preparando…", "wa");
     $("setup").innerHTML = '<div><h1>Vamos a dejarlo listo</h1><p class="sub">Dos cosas antes de empezar: el navegador con el que se hacen las capturas y la IA que preparará el catálogo de tu app. Solo se hace una vez; después puedes cambiarlo en Ajustes e IA.</p></div>' +
       '<div class="card"><div class="row"><span class="num">1</span><div class="grow"><b>Navegador de capturas</b></div></div><div style="margin-top:12px">' + chrom + '</div></div>' +
-      '<div class="card"><div class="row"><span class="num">2</span><div class="grow"><b>Tu herramienta de IA</b><div class="small mut">Elige la que ya tengas (Claude Code, GitHub Copilot u OpenAI Codex) y el modelo de cada etapa. Se guarda solo.</div></div></div>' + (ai.error ? '<div class="banner er" style="margin-top:12px">El archivo ' + esc(ai.globalPath) + ' tiene un error: corrígelo y pulsa Recargar. <button class="btn" id="reloadSetup">Recargar</button></div>' : warnings() + '<div id="aiTools" style="margin:12px 0">' + toolsHtml(ai.info || {}) + '</div><div id="aiEd"></div>') + '</div>' +
+      '<div class="card"><div class="row"><span class="num">2</span><div class="grow"><b>Tu herramienta de IA</b><div class="small mut">Elige la que ya tengas (Claude Code, GitHub Copilot u OpenAI Codex) y el modelo de cada etapa. Se guarda solo.</div></div></div>' + (ai.error ? '<div class="banner er" style="margin-top:12px">El archivo ' + esc(ai.globalPath) + ' tiene un error: corrígelo y pulsa Recargar. <button class="btn" id="reloadSetup">Recargar</button></div>' : warnings() + presetHtml() + '<div id="aiTools" style="margin:12px 0">' + toolsHtml(ai.info || {}) + '</div><div id="aiEd"></div>') + '</div>' +
       '<div id="setupFoot" class="row"></div>';
     if ($("dlChromium")) $("dlChromium").onclick = startChromium;
     if ($("reloadSetup")) $("reloadSetup").onclick = function () { load().catch(fail); };
     onAiSaved = footSetup;
-    if (!ai.error) mountAiEditor($("aiEd"), $("aiTools"));
+    if (!ai.error) { mountAiEditor($("aiEd"), $("aiTools")); bindPreset(); autoPreset(); }
     footSetup();
+  }
+  // «Configuración básica»: una herramienta para las 4 etapas con sus modelos recomendados.
+  var presetTried = false, PROV_ORDER = ["claude", "copilot", "codex"];
+  function presetHtml() {
+    var info = S.ai.info || {}, names = Object.keys(S.ai.providers);
+    return '<div class="card" style="background:var(--bg);margin:12px 0"><b>Configuración básica</b><div class="small mut" style="margin:2px 0 10px">Usa una sola herramienta en las cuatro etapas (descubrir, flujos, mocks y reparar) con los modelos recomendados. Luego puedes afinar cada etapa aquí debajo.</div><div class="row">' +
+      names.map(function (n) { var ok = info[n] && info[n].found; return '<button class="btn" data-preset="' + esc(n) + '"' + (ok ? "" : ' disabled title="No está instalada"') + ">Usar " + esc(n) + (ok ? "" : " (no instalada)") + "</button>"; }).join("") + "</div></div>";
+  }
+  function bindPreset() { document.querySelectorAll("[data-preset]").forEach(function (b) { b.onclick = function () { applyPreset(b.dataset.preset, false); }; }); }
+  function applyPreset(name, auto) {
+    var stages = ChipAi.preset(name, S.ai.info || {}, STAGES.map(function (s) { return s[0]; }));
+    return api.invoke("home:saveAi", stages).then(function () {
+      S.ai.stages = stages; S.ai.problems = ChipAi.problems(stages, S.ai.info || {}); renderSetup();
+      ChipAi.toast(auto ? "He configurado la IA con " + name + ": puedes cambiarlo abajo" : "IA configurada con " + name + " en las 4 etapas", "ok");
+    }, fail);
+  }
+  // Si lo guardado no se puede usar (p. ej. Claude por defecto y no está instalado) pero hay otra herramienta, se deja ya configurada.
+  function autoPreset() {
+    if (presetTried || !window.ChipAi) return; presetTried = true;
+    var info = S.ai.info || {};
+    if (!(S.ai.problems || []).length) return;
+    var pick = PROV_ORDER.filter(function (n) { return info[n] && info[n].found; })[0];
+    if (pick) applyPreset(pick, true);
   }
   function footSetup() {
     var f = $("setupFoot"); if (!f) return;

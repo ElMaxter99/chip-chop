@@ -29,6 +29,19 @@
     return { html: opts, other: sel === OTHER ? value : "", note: m.note || "", source: m.source };
   }
 
+  // Configuración básica por herramienta: modelo de cada etapa (potente para descubrir/mocks/reparar, barato para flujos).
+  // Claude trae alias fijos; Copilot elige uno económico de SU lista si lo hay; Codex usa el modelo de su config.toml.
+  var PRESET = { claude: { discover: "sonnet", flows: "haiku", mocks: "sonnet", repair: "sonnet" } };
+  function preset(provider, info, ids) {
+    var i = info[provider] || {}, opts = (i.models && i.models.options) || [], base = PRESET[i.type] || {}, out = {};
+    ids.forEach(function (id) {
+      var m = base[id];
+      if (!m && i.type === "copilot" && id === "flows") { var cheap = opts.filter(function (o) { return /mini|haiku|flash|lite/i.test(o.value); })[0]; m = cheap && cheap.value; }
+      var o = { provider: provider }; if (m && (!opts.length || opts.some(function (x) { return x.value === m; }))) o.model = m; out[id] = o;
+    });
+    return out;
+  }
+
   /** HTML de las filas. o = { stages:[[id,título,descripción]], cfg:{providers,stages}, info, extra?:(id)=>html } */
   function rows(o) {
     var names = Object.keys(o.cfg.providers);
@@ -155,5 +168,5 @@
   }
   function collect(el) { var o = {}; el.querySelectorAll(".ai-stage").forEach(function (row) { o[row.dataset.stage] = read(row); }); return o; }
 
-  root.ChipAi = { rows: rows, bind: bind, collect: collect, read: read, toast: toast, problems: problems };
+  root.ChipAi = { rows: rows, bind: bind, collect: collect, read: read, toast: toast, problems: problems, preset: preset };
 })(window);
