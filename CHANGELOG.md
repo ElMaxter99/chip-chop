@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [v0.4.9](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.9) - 2026-11-26
+### Fixed
+- **Las listas de modelos ya no van escritas a mano:** salen siempre de la herramienta. Copilot: de `copilot help` y `copilot help config`; Claude: de los alias que documenta `claude --help` y, con `ANTHROPIC_API_KEY`, de la API de Anthropic (`/v1/models`); Codex no publica lista. Si no se puede leer, solo se ofrece «Predeterminado» y «Otro…» con un aviso que lo explica, en vez de una lista que se queda atrás y falla (p. ej. un modelo que tu plan no tiene). Los modelos de la configuración básica solo se proponen si están en la lista real.
+
 ## [v0.4.8](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.8) - 2026-11-26
 ### Fixed
 - **«Probar esta etapa» explica por qué falla:** muestra lo que el programa escribió por stderr y, si la herramienta responde con su modelo por defecto pero no con el elegido, lo dice claramente («rechaza el modelo X») en vez de un error genérico.
