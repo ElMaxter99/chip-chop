@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [v0.4.6](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.6) - 2026-11-26
+### Fixed
+- **Actualizar en Linux (.deb/.rpm) sin salir de la app:** ahora se abre una ventana con el progreso (descargando, permisos, instalando, reiniciando), pide la contraseña de administrador con la ventana del sistema (polkit) y explica qué pasó si la cancelas o falla, con botón de reintentar. Al terminar chip-chop se cierra y se abre sola; ya no hay que cerrarla a mano. En Windows y AppImage se usa la misma ventana.
+
 ## [v0.4.5](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.5) - 2026-11-25
 ### Added
 - **Configuración inicial y control de la IA:** la primera vez la app descarga el navegador (con progreso) y deja la IA ya configurada con una configuración básica por herramienta (Claude, Copilot o Codex) en las cuatro etapas, que se puede cambiar. Los cambios en la pestaña IA se guardan solos con un aviso, al elegir herramienta se vuelven a buscar sus modelos (sin botón «Volver a buscar»), «Probar esta etapa» abre una ventana que muestra qué hace y el resultado, y si la herramienta o el modelo elegidos dejan de funcionar no se lanza la IA y se lleva al usuario a su configuración.
