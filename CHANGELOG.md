@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [v0.4.11](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.11) - 2026-11-26
+### Added
+- **Generar con IA ya no es una caja negra:** al pulsar se abre una ventana con el progreso en vivo (qué etapa, qué lee y escribe la IA, tiempo) y una franja en la página con «Ver detalle»; se puede mandar a segundo plano. **Medición de consumo por etapa:** tras cada ejecución se muestra lo que informa tu herramienta (tokens y coste equivalente en Claude Code, AI credits y premium requests en Copilot, tokens en Codex) por etapa, la última ejecución y el acumulado, también en «Probar esta etapa». Se guarda en `.chipchop/ai-usage.jsonl` (ignorado por git). Nada se estima: si un CLI no informa algo, no se muestra. **Selector de modelo con buscador:** lista filtrable con teclado, cabecera «Cargando modelos…» mientras se leen y la opción de escribir el nombre exacto.
+
+### Changed
+- Claude Code se lanza con `--output-format stream-json --verbose`, Copilot con `--output-format json` (antes `-s`) y Codex con `--json`, para ver los pasos y medir el consumo. Los pasos salen como «lee x», «escribe y» en el registro.
+
 ## [v0.4.10](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.10) - 2026-11-26
 ### Fixed
 - **«Actualizar ahora» del aviso de versión nueva ahora actualiza de verdad** (antes solo cambiaba de pestaña): abre la misma ventana de progreso que el botón Actualizar. **Si `pkexec` no puede elevar permisos** (error «pkexec must be setuid root», típico al abrir la app desde la terminal de un editor en snap/flatpak) se abre una terminal para escribir la contraseña con `sudo` y la actualización continúa; si tampoco hay terminal, se deja el paquete descargado y se explica el comando.
