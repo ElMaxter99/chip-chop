@@ -12,7 +12,7 @@ import { doctor } from "./doctor.js";
 import { aiInfo, aiProblems } from "./aiInfo.js";
 import { exists, writeText } from "./fsutil.js";
 import { initProject } from "./init.js";
-import { runCapture, runCompare } from "./pipeline.js";
+import { runCapture, runCompare, validateCaptures } from "./pipeline.js";
 import { listRefs } from "./runner.js";
 import { chipDir, uiDir } from "./paths.js";
 import type { StageName } from "./types.js";
@@ -155,6 +155,14 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
         const issues = validateCatalogDir(appDir);
         return void send(res, 200, { issues, text: formatIssues(issues) });
       }
+      if (u.pathname === "/api/validate/captures" && req.method === "POST") {
+        const { base, head } = await body(req);
+        if (typeof base !== "string" || !base.trim() || typeof head !== "string" || !head.trim()) {
+          return void send(res, 400, { error: "Selecciona las dos ramas que quieres comprobar." });
+        }
+        const job = start("validate", (log) => validateCaptures(appDir, [base.trim(), head.trim()], log));
+        return void send(res, 200, { job: job.id });
+      }
       if (u.pathname === "/api/update" && req.method === "GET") {
         return void send(res, 200, await checkForUpdate().catch((e: Error) => ({ error: e.message, channel: getChannel(), available: false })));
       }
@@ -201,7 +209,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
       if (u.pathname === "/api/compare" && req.method === "POST") {
         const b = await body(req);
         const job = start("compare", async (log) => {
-          const r = await runCompare({ appDir, base: { label: String(b.base), ref: String(b.base) }, head: { label: String(b.head), ref: String(b.head) }, mode: b.mode === "flow-audit" ? "flow-audit" : "restyle", log });
+          const r = await runCompare({ appDir, base: { label: String(b.base), ref: String(b.base) }, head: { label: String(b.head), ref: String(b.head) }, catalog: b.catalog === "cwd" ? "cwd" : "auto", mode: b.mode === "flow-audit" ? "flow-audit" : "restyle", log });
           return { summary: r.report.summary, dir: r.dir.split(sep).pop(), reasons: failureReasons(r.report) };
         });
         return void send(res, 200, { job: job.id });

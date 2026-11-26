@@ -9,6 +9,8 @@
   var STAGES = [["discover", "Descubrir", "Rutas y modales → estados"], ["flows", "Flujos", "Recorridos del usuario"], ["mocks", "Mocks", "Respuestas del backend con tipos"], ["repair", "Reparar", "Corrige errores de validación"]];
   var project = {}, ai = null, aiInfo = null, update = null, lastCompare = null;
 
+  var branchPair = null, validation = null;
+
   function api(path, method, body) {
     return fetch(path + (path.indexOf("?") < 0 ? "?" : "&") + "token=" + token, {
       method: method || "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined
@@ -18,10 +20,10 @@
   function job(path, body, logId, onLine) {
     var pre = logId ? $(logId) : null; if (pre) { pre.hidden = false; pre.textContent = ""; }
     return api(path, "POST", body).then(function (r) {
-      return new Promise(function (resolve) {
+      return new Promise(function (resolve, reject) {
         var es = new EventSource("/api/jobs/" + r.job + "/events?token=" + token);
         es.onmessage = function (e) { var line = JSON.parse(e.data); if (pre) { pre.textContent += line + "\n"; pre.scrollTop = pre.scrollHeight; } if (onLine) onLine(line); };
-        es.addEventListener("end", function (e) { es.close(); api("/api/jobs/" + r.job).then(function (j) { resolve({ status: JSON.parse(e.data), result: j.result }); }); });
+        es.addEventListener("end", function (e) { es.close(); api("/api/jobs/" + r.job).then(function (j) { resolve({ status: JSON.parse(e.data), result: j.result }); }, reject); });
       });
     });
   }
@@ -96,6 +98,51 @@
   function needAiConfig(probs) {
     return dialog({ kind: "wa", title: "Configura la IA para continuar", message: "Lo que estaba elegido ya no se puede usar:", detail: probs.map(function (p) { return "• " + (p.stage ? p.stage + ": " : "") + p.message; }).join("\n"), buttons: [{ label: "Ir a la configuración de IA", primary: true, value: true }] }).then(function () { show("ia"); });
   }
+  function setBranch(side, ref) {
+    branchPair[side] = ref;
+    var input = $("project-" + side), combo = $(side);
+    if (input) input.value = ref;
+    if (combo) {
+      combo.value = ref;
+      combo.parentNode.querySelector(".md-trigger span").textContent = ref || "Elige una rama";
+    }
+    renderValidation();
+  }
+  function renderValidation() {
+    var panel = $("validation-result");
+    if (!panel) return;
+    var r = validation && validation.base === branchPair.base && validation.head === branchPair.head ? validation.result : null;
+    var status = badge("Sin comprobar");
+    if (r) {
+      if (r.ok) status = badge("Capturas verificadas", "ok");
+      else if (!r.branches.length) status = badge("Catálogo con errores", "er");
+      else if (r.pairs) status = badge("Hay capturas fallidas", "wa");
+      else status = badge("Sin pares de capturas", "er");
+    }
+    $("valst").innerHTML = status;
+    if ($("compare-validation")) $("compare-validation").innerHTML = project.hasCatalog ? status : "";
+    panel.hidden = !r;
+    panel.innerHTML = r ? '<h2>Resultado de la validación</h2><p>' + r.pairs + ' pares de capturas comparables</p>' +
+      r.branches.map(function (b) {
+        return '<div class="card"><b>' + esc(b.ref) + '</b><p>' + b.captured + ' capturas · ' + b.failed + ' estados fallidos' +
+          (b.unmocked ? ' · ' + b.unmocked + ' peticiones sin mock' : '') + '</p>' +
+          (b.error ? '<p class="small">' + esc(b.error) + '</p>' : '') +
+          (b.preview ? '<img style="max-width:100%;max-height:240px" alt="' + esc(b.preview.id + " · " + b.preview.viewport) + '" src="data:image/png;base64,' + esc(b.preview.png) + '">' : '') + '</div>';
+      }).join("") + (r.text ? '<pre class="log">' + esc(r.text) + '</pre>' : '') : "";
+  }
+  function validatePair(pair, auto) {
+    if (!pair.base || !pair.head) return notify("Selecciona las dos ramas que quieres comprobar.");
+    validation = null;
+    renderValidation();
+    var rn = window.ChipRun.start({ host: $("validation-run"), title: "Validar capturas", plain: true, autoOpen: !auto });
+    return job("/api/validate/captures", pair, null, function (line) { rn.push(line); }).then(function (r) {
+      rn.finish(r.status, r.result);
+      if (r.status === "done") {
+        validation = { base: pair.base, head: pair.head, result: r.result };
+        renderValidation();
+      }
+    }, function (e) { rn.finish("failed"); throw e; });
+  }
   function renderProject() {
     var c = $("proyecto"), p = project, k = p.counts || {};
     $("app").textContent = p.appDir || ""; $("app").title = p.appDir || "";
@@ -106,36 +153,47 @@
       ? step(1, "Crear carpeta .chipchop", "Configuración, estados y guías para la IA.", badge("Hecho", "ok"), "")
       : step(1, "Crear carpeta .chipchop", "Configuración, estados y guías para la IA.", badge("Pendiente"), '<label class="f">Framework<select id="fw"><option>angularjs</option><option>angular</option><option>react</option><option>other</option></select></label><button class="btn p" id="init">Crear</button>');
     var s2 = step(2, "Generar con IA", esc(disc) + " lee el código y escribe estados, flujos y mocks.", (aiBad.length ? badge("Revisar la IA", "wa") : p.hasCatalog ? (generated ? badge(k.states + " estados · " + k.mocks + " mocks", "ok") : badge("Pendiente")) : badge("Falta el paso 1", "wa")), '<button class="btn p" id="gen"' + (p.hasCatalog ? "" : " disabled") + ">" + (generated ? "Volver a generar" : "Generar con IA") + "</button>");
-    var s3 = step(3, "Validar", "Comprueba que todo lo generado es coherente.", '<span id="valst">' + badge("Sin comprobar") + "</span>", '<button class="btn" id="val"' + (p.hasCatalog ? "" : " disabled") + ">Validar</button>");
-    c.innerHTML = '<div><h1>Preparar la app</h1><p class="sub">Tres pasos. Puedes repetir cualquiera cuando cambie el código.</p></div>' + s1 + s2 + s3 +
-      '<div id="genRun" hidden></div><pre class="log" id="log1" hidden></pre><div class="card"><h2>Entorno</h2><div id="env" class="mut">Comprobando…</div></div>';
+    var s3 = step(3, "Validar capturas", "Compila las dos ramas y prueba los estados, flujos y mocks en el navegador.", '<span id="valst"></span>', '<button class="btn" id="val"' + (p.hasCatalog ? "" : " disabled") + ">Validar</button>");
+    var branchField = function (side, label) { return '<label class="f">' + label + '<input id="project-' + side + '" list="project-refs" value="' + esc(branchPair[side]) + '"></label>'; };
+    var refs = p.refs ? p.refs.branches.concat(p.refs.tags) : [];
+    c.innerHTML = '<div><h1>Preparar la app</h1><p class="sub">Elige las ramas del informe, prepara el catálogo y comprueba sus capturas.</p></div>' +
+      '<div class="card"><h2>Ramas del informe</h2><div class="row">' + branchField("base", "Rama base") + branchField("head", "Rama a comparar") + '</div><datalist id="project-refs">' +
+      refs.map(function (ref) { return '<option value="' + esc(ref) + '"></option>'; }).join("") + '</datalist></div>' + s1 + s2 + s3 +
+      '<div id="genRun" hidden></div><div id="validation-run" hidden></div><div id="validation-result" hidden></div><div class="card"><h2>Entorno</h2><div id="env" class="mut">Comprobando…</div></div>';
+    ["base", "head"].forEach(function (side) {
+      var input = $("project-" + side);
+      input.onchange = function () { setBranch(side, input.value.trim()); };
+    });
+    renderValidation();
     if ($("init")) $("init").onclick = function () { api("/api/init", "POST", { framework: $("fw").value }).then(load); };
     $("gen").onclick = function () {
       busy(this, function () {
+        var pair = { base: branchPair.base, head: branchPair.head };
+        if (!pair.base || !pair.head) return notify("Selecciona las dos ramas antes de generar el catálogo.");
         return api("/api/ai/info?refresh=1").then(function (info) {
           aiInfo = info;
           var probs = ChipAi.problems(ai && ai.stages ? ai.stages : {}, info);
           if (probs.length) return needAiConfig(probs);
+          validation = null;
+          renderValidation();
           var lines = [], host = $("genRun"), rn = window.ChipRun.start({ host: host, title: "Generar con IA" });
-          return job("/api/ai/run", {}, null, function (l) { lines.push(l); rn.push(l); }).then(function (r) {
-            rn.finish(r.status, r.result);
+          return job("/api/ai/run", { extra: "Genera un catálogo compartido para comparar estas dos referencias Git: " + JSON.stringify(pair) + ". Consulta ambas al definir rutas, selectores y contratos de mocks. Prioriza un flujo de login que produzca una sesión válida y los estados que se puedan capturar en ambas referencias." }, null, function (l) { lines.push(l); rn.push(l); }).then(function (r) {
+            rn.finish(r.status === "done" && r.result && !r.result.ok ? "failed" : r.status, r.result);
             return load().then(function () {
               rn.attach($("genRun"));
               if (r.status === "failed") {
                 if (/model|modelo/i.test(lines.join("\n")) && /(not found|invalid|unknown|unsupported|does not exist|not available|no existe|no disponible)/i.test(lines.join("\n"))) return needAiConfig([{ stage: "IA", message: "la herramienta rechazó el modelo elegido" }]);
-                notify("La generación con IA ha fallado. Revisa el registro de debajo para ver el motivo.", "La generación falló");
+                return notify("La generación con IA ha fallado. Revisa el registro de debajo para ver el motivo.", "La generación falló");
               }
+              if (!r.result.ok) return dialog({ kind: "er", title: "El catálogo tiene errores", message: "Corrige los errores para poder comprobar las capturas.", detail: r.result.issues });
+              return validatePair(pair, true);
             });
           }, function (e) { if (e.code === "ai-config") return needAiConfig(e.problems || []); throw e; });
         });
       });
     };
     $("val").onclick = function () {
-      busy(this, function () { return api("/api/validate", "POST").then(function (r) {
-        var errs = r.issues.filter(function (i) { return i.severity === "error"; }).length, warns = r.issues.length - errs;
-        $("valst").innerHTML = errs ? badge(errs + " errores", "er") : warns ? badge(warns + " avisos", "wa") : badge("Todo bien", "ok");
-        var pre = $("log1"); pre.hidden = !r.text; pre.textContent = r.text;
-      }); });
+      busy(this, function () { return validatePair({ base: branchPair.base, head: branchPair.head }, false); });
     };
     api("/api/doctor").then(function (cs) {
       $("env").innerHTML = cs.map(function (x) { return '<div class="kv"><span>' + esc(x.name) + '</span><span>' + esc(tr(x.detail)) + " " + (x.ok ? badge("OK", "ok") : badge(x.required ? "Falta" : "No encontrado", x.required ? "er" : "wa")) + "</span></div>"; }).join("");
@@ -213,7 +271,7 @@
     var inp = root.querySelector("input[type=hidden]"), tr = root.querySelector(".md-trigger"), menu = root.querySelector(".md-menu"), q = root.querySelector(".md-search"), ul = root.querySelector(".md-list"), foot = root.querySelector(".md-foot"), act = 0, shown = [];
     function label() { tr.firstChild.textContent = inp.value || "Elige una rama"; }
     function close() { menu.hidden = true; tr.setAttribute("aria-expanded", "false"); }
-    function pick(v) { inp.value = v; label(); close(); tr.focus(); }
+    function pick(v) { setBranch(inp.id, v); label(); close(); tr.focus(); }
     function draw() {
       var t = q.value.trim().toLowerCase();
       shown = refs.filter(function (r) { return !t || r.toLowerCase().indexOf(t) >= 0; });
@@ -241,20 +299,22 @@
   }
   function renderCompare() {
     var refs = (project.refs ? project.refs.branches.concat(project.refs.tags) : []);
-    var combo = function (id, label, sel) { return '<div class="f"><span>' + label + '</span><div class="mdsel combo" data-for="' + id + '"><input type="hidden" id="' + id + '" value="' + esc(refs[sel] || "") + '"><button type="button" class="md-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + '"><span></span><span aria-hidden="true">▾</span></button><div class="md-menu" hidden><input type="text" class="md-search" placeholder="Buscar rama o etiqueta…" aria-label="Buscar ' + label.toLowerCase() + '" autocomplete="off" spellcheck="false"><ul class="md-list" role="listbox"></ul><div class="md-foot small mut"></div></div></div></div>'; };
+    var combo = function (id, label) { return '<div class="f"><span>' + label + '</span><div class="mdsel combo" data-for="' + id + '"><input type="hidden" id="' + id + '" value="' + esc(branchPair[id]) + '"><button type="button" class="md-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + '"><span></span><span aria-hidden="true">▾</span></button><div class="md-menu" hidden><input type="text" class="md-search" placeholder="Buscar rama o etiqueta…" aria-label="Buscar ' + label.toLowerCase() + '" autocomplete="off" spellcheck="false"><ul class="md-list" role="listbox"></ul><div class="md-foot small mut"></div></div></div></div>'; };
     $("comparar").innerHTML = '<div><h1>Comparar dos ramas</h1><p class="sub">Se compila cada rama aparte; tu carpeta de trabajo no se toca.</p></div>' +
-      '<div class="card"><div class="row" style="align-items:flex-end">' + combo("base", "Base", 0) + combo("head", "Cabeza", refs.length > 1 ? 1 : 0) + '' +
+      '<div class="card"><div class="row" style="align-items:flex-end">' + combo("base", "Base") + combo("head", "Cabeza") + '' +
       '<div class="f"><span>Modo</span><div class="seg" role="radiogroup" aria-label="Modo"><label><input type="radio" name="mode" value="restyle" checked><span>Restyle</span></label><label><input type="radio" name="mode" value="flow-audit"><span>Auditar flujos</span></label></div></div><span class="grow"></span><button class="btn p" id="cmp">Comparar</button></div>' +
-      '<p class="small mut" style="margin:12px 0 0">Restyle: solo pueden cambiar los píxeles. Auditar flujos: se esperan pantallas nuevas.</p></div>' +
+      '<p class="small mut" style="margin:12px 0 0">Restyle: solo pueden cambiar los píxeles. Auditar flujos: se esperan pantallas nuevas.</p><div id="compare-validation" style="margin-top:8px"></div></div>' +
       '<div id="cmpRun" hidden></div><div id="result"></div>';
     document.querySelectorAll("#comparar .combo").forEach(function (c) { refCombo(c, refs); });
+    renderValidation();
     if (!project.hasCatalog) $("result").innerHTML = '<div class="banner wa"><strong>Primero prepara la app</strong><span class="grow">Falta la carpeta .chipchop (pestaña Proyecto).</span></div>';
     $("cmp").onclick = function () {
       var base = $("base").value, head = $("head").value, mode = document.querySelector('input[name="mode"]:checked').value;
+      if (!base || !head) return notify("Selecciona las dos ramas que quieres comparar.");
       $("result").innerHTML = "";
       busy(this, function () {
         var host = $("cmpRun"), rn = window.ChipRun.start({ host: host, title: "Comparar " + base + " con " + head, plain: true });
-        return job("/api/compare", { base: base, head: head, mode: mode }, null, function (l) { rn.push(l); }).then(function (r) {
+        return job("/api/compare", { base: base, head: head, mode: mode, catalog: project.hasCatalog ? "cwd" : "auto" }, null, function (l) { rn.push(l); }).then(function (r) {
           rn.finish(r.status, r.result);
           if (r.status !== "done") { $("result").innerHTML = '<div class="banner er"><strong>No se pudo comparar.</strong><span class="grow">Abre «Ver detalle» arriba: dice qué falló.</span></div>'; return; }
           lastCompare = r.result; showResult(r.result);
@@ -306,7 +366,7 @@
 
   // ---------- start ----------
   function load() {
-    return api("/api/project").then(function (p) { project = p; return api("/api/ai").then(function (c) { ai = c; }, function () {}); }).then(function () { return api("/api/ai/info").then(function (i) { aiInfo = i; }, function () {}); }).then(function () { renderProject(); renderCompare(); renderBanner(); });
+    return api("/api/project").then(function (p) { project = p; var refs = p.refs ? p.refs.branches.concat(p.refs.tags) : []; if (!branchPair) branchPair = { base: refs[0] || "", head: refs[1] || refs[0] || "" }; return api("/api/ai").then(function (c) { ai = c; }, function () {}); }).then(function () { return api("/api/ai/info").then(function (i) { aiInfo = i; }, function () {}); }).then(function () { renderProject(); renderCompare(); renderBanner(); });
   }
   load().then(checkUpdate).catch(function (e) { document.body.insertAdjacentHTML("beforeend", '<main><div class="banner er"><strong>No se pudo conectar.</strong><span class="grow">' + esc(e.message) + " Abre el enlace que imprime chip-chop ui.</span></div></main>"); });
 })();

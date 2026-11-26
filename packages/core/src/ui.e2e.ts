@@ -1,13 +1,24 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { chromium } from "playwright";
+import { stringify } from "yaml";
 import { makeRepo } from "./demoRepo.js";
 import { startUi } from "./server.js";
 
-test("local app: compare from the UI, see the report list, open the update tab", { timeout: 300000 }, async () => {
+test("local app: generation validates both selected branches before comparison", { timeout: 300000 }, async () => {
   process.env.CHIPCHOP_HOME = makeRepo() + "-home";
   const dir = makeRepo();
+  const fakeAi = join(dir, "fake-ai.mjs");
+  writeFileSync(fakeAi, `import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+assert.ok(readFileSync(0, "utf8").includes('{"base":"develop","head":"restyle"}'));
+`);
+  writeFileSync(join(dir, ".chipchop", "ai.yaml"), stringify({
+    providers: { test: { type: "custom", command: process.execPath, args: [fakeAi], promptVia: "stdin" } },
+    stages: Object.fromEntries(["discover", "flows", "mocks", "repair"].map((stage) => [stage, { provider: "test" }])),
+  }));
   const ui = await startUi(dir);
   const browser = await chromium.launch();
   try {
@@ -18,7 +29,18 @@ test("local app: compare from the UI, see the report list, open the update tab",
     await page.getByText("Comprobando").waitFor({ state: "detached", timeout: 30000 });
     if (process.env.CHIPCHOP_SHOTS) await page.screenshot({ path: `${process.env.CHIPCHOP_SHOTS}/proyecto.png` });
 
+    await page.locator("#project-base").fill("develop");
+    await page.locator("#project-head").fill("restyle");
+    await page.locator("#gen").click();
+    await page.getByText("10 pares de capturas comparables").waitFor({ timeout: 120000 });
+    await page.locator(".runmodal [data-m=x]").click();
+    assert.equal(await page.locator("#validation-result img").count(), 2);
+    assert.ok(await page.locator("#validation-result img").first().evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth > 0)));
+
     await page.getByRole("button", { name: "Comparar", exact: true }).first().click();
+    assert.equal(await page.locator("#base").inputValue(), "develop");
+    assert.equal(await page.locator("#head").inputValue(), "restyle");
+    assert.match(await page.locator("#compare-validation").innerText(), /Capturas verificadas/);
     for (const [id, ref] of [["base", "develop"], ["head", "restyle"]] as const) {
       await page.locator(`[data-for="${id}"] .md-trigger`).click();
       await page.locator(`[data-for="${id}"] .md-search`).fill(ref);
