@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [v0.4.13](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.13) - 2026-11-26
+### Changed
+- Cuando un flujo o estado falla al capturar, el mensaje ahora indica qué paso era, qué selector esperaba y en qué URL se quedó la página, en vez de solo «Timeout exceeded».
+
 ## [v0.4.12](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.12) - 2026-11-26
 ### Fixed
 - Comparar: las ramas se eligen en un desplegable con buscador (también admite escribir una referencia), el progreso sale en un modal con «Ver detalle» como en Preparar la app, el logo de la cabecera ya no se pierde sobre el fondo oscuro, y si `npm ci` falla en la rama (lockfile ausente o desincronizado) se reintenta con `npm install`.
