@@ -208,22 +208,58 @@
 
   // ---------- Comparar ----------
   var CH = [["identical", "Idénticos", "ok"], ["visualOnly", "Solo visual", "in"], ["structural", "Estructural", "wa"], ["added", "Añadidos", "in"], ["removed", "Eliminados", ""], ["failed", "Fallidos", "er"]];
+  // Desplegable con buscador para ramas/etiquetas (filtra al escribir, flechas + Intro, y admite escribir una referencia que no esté en la lista).
+  function refCombo(root, refs) {
+    var inp = root.querySelector("input[type=hidden]"), tr = root.querySelector(".md-trigger"), menu = root.querySelector(".md-menu"), q = root.querySelector(".md-search"), ul = root.querySelector(".md-list"), foot = root.querySelector(".md-foot"), act = 0, shown = [];
+    function label() { tr.firstChild.textContent = inp.value || "Elige una rama"; }
+    function close() { menu.hidden = true; tr.setAttribute("aria-expanded", "false"); }
+    function pick(v) { inp.value = v; label(); close(); tr.focus(); }
+    function draw() {
+      var t = q.value.trim().toLowerCase();
+      shown = refs.filter(function (r) { return !t || r.toLowerCase().indexOf(t) >= 0; });
+      var custom = q.value.trim() && refs.indexOf(q.value.trim()) < 0 ? q.value.trim() : "";
+      if (act >= shown.length + (custom ? 1 : 0)) act = 0;
+      ul.innerHTML = shown.map(function (r, i) { return '<li role="option" class="md-it' + (r === inp.value ? " on" : "") + (i === act ? " act" : "") + '" data-i="' + i + '"><b>' + esc(r) + "</b></li>"; }).join("") +
+        (custom ? '<li role="option" class="md-it md-custom' + (act === shown.length ? " act" : "") + '" data-c="1"><b>Usar «' + esc(custom) + "»</b></li>" : "") +
+        (!shown.length && !custom ? '<li class="md-none small mut">Sin resultados</li>' : "");
+      foot.textContent = shown.length + " de " + refs.length;
+      var a = ul.querySelector(".act"); if (a && a.scrollIntoView) a.scrollIntoView({ block: "nearest" });
+    }
+    function open() { menu.hidden = false; tr.setAttribute("aria-expanded", "true"); q.value = ""; act = Math.max(0, refs.indexOf(inp.value)); draw(); q.focus(); }
+    tr.onclick = function () { menu.hidden ? open() : close(); };
+    q.oninput = function () { act = 0; draw(); };
+    q.onkeydown = function (e) {
+      var n = shown.length + (q.value.trim() && refs.indexOf(q.value.trim()) < 0 ? 1 : 0);
+      if (e.key === "ArrowDown") { e.preventDefault(); act = n ? (act + 1) % n : 0; draw(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); act = n ? (act + n - 1) % n : 0; draw(); }
+      else if (e.key === "Enter") { e.preventDefault(); if (act < shown.length) pick(shown[act]); else if (q.value.trim()) pick(q.value.trim()); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); tr.focus(); }
+    };
+    ul.onmousedown = function (e) { var li = e.target.closest("li.md-it"); if (!li) return; e.preventDefault(); pick(li.getAttribute("data-c") ? q.value.trim() : shown[+li.getAttribute("data-i")]); };
+    document.addEventListener("click", function (e) { if (!root.contains(e.target)) close(); });
+    label();
+  }
   function renderCompare() {
     var refs = (project.refs ? project.refs.branches.concat(project.refs.tags) : []);
-    var opts = function (sel) { return refs.map(function (r, i) { return "<option" + (i === sel ? " selected" : "") + ">" + esc(r) + "</option>"; }).join(""); };
+    var combo = function (id, label, sel) { return '<div class="f"><span>' + label + '</span><div class="mdsel combo" data-for="' + id + '"><input type="hidden" id="' + id + '" value="' + esc(refs[sel] || "") + '"><button type="button" class="md-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + '"><span></span><span aria-hidden="true">▾</span></button><div class="md-menu" hidden><input type="text" class="md-search" placeholder="Buscar rama o etiqueta…" aria-label="Buscar ' + label.toLowerCase() + '" autocomplete="off" spellcheck="false"><ul class="md-list" role="listbox"></ul><div class="md-foot small mut"></div></div></div></div>'; };
     $("comparar").innerHTML = '<div><h1>Comparar dos ramas</h1><p class="sub">Se compila cada rama aparte; tu carpeta de trabajo no se toca.</p></div>' +
-      '<div class="card"><div class="row" style="align-items:flex-end"><label class="f">Base<select id="base">' + opts(0) + '</select></label><label class="f">Cabeza<select id="head">' + opts(refs.length > 1 ? 1 : 0) + '</select></label>' +
+      '<div class="card"><div class="row" style="align-items:flex-end">' + combo("base", "Base", 0) + combo("head", "Cabeza", refs.length > 1 ? 1 : 0) + '' +
       '<div class="f"><span>Modo</span><div class="seg" role="radiogroup" aria-label="Modo"><label><input type="radio" name="mode" value="restyle" checked><span>Restyle</span></label><label><input type="radio" name="mode" value="flow-audit"><span>Auditar flujos</span></label></div></div><span class="grow"></span><button class="btn p" id="cmp">Comparar</button></div>' +
       '<p class="small mut" style="margin:12px 0 0">Restyle: solo pueden cambiar los píxeles. Auditar flujos: se esperan pantallas nuevas.</p></div>' +
-      '<pre class="log" id="log2" hidden></pre><div id="result"></div>';
+      '<div id="cmpRun" hidden></div><div id="result"></div>';
+    document.querySelectorAll("#comparar .combo").forEach(function (c) { refCombo(c, refs); });
     if (!project.hasCatalog) $("result").innerHTML = '<div class="banner wa"><strong>Primero prepara la app</strong><span class="grow">Falta la carpeta .chipchop (pestaña Proyecto).</span></div>';
     $("cmp").onclick = function () {
       var base = $("base").value, head = $("head").value, mode = document.querySelector('input[name="mode"]:checked').value;
       $("result").innerHTML = "";
-      busy(this, function () { return job("/api/compare", { base: base, head: head, mode: mode }, "log2").then(function (r) {
-        if (r.status !== "done") { $("result").innerHTML = '<div class="banner er"><strong>No se pudo comparar.</strong><span class="grow">Mira el registro de arriba: dice qué falló.</span></div>'; return; }
-        lastCompare = r.result; showResult(r.result);
-      }); });
+      busy(this, function () {
+        var host = $("cmpRun"), rn = window.ChipRun.start({ host: host, title: "Comparar " + base + " con " + head, plain: true });
+        return job("/api/compare", { base: base, head: head, mode: mode }, null, function (l) { rn.push(l); }).then(function (r) {
+          rn.finish(r.status, r.result);
+          if (r.status !== "done") { $("result").innerHTML = '<div class="banner er"><strong>No se pudo comparar.</strong><span class="grow">Abre «Ver detalle» arriba: dice qué falló.</span></div>'; return; }
+          lastCompare = r.result; showResult(r.result);
+        });
+      });
     };
   }
   function showResult(r) {

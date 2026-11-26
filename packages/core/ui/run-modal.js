@@ -39,15 +39,15 @@
     }
     function paintStrip() {
       q("t").textContent = ended ? (status === "done" ? "Terminó" : "No se completó") + " · " + clock(Date.now() - t0) : title();
-      q("s").textContent = ended ? summary() : "último paso: " + last + " · " + clock(Date.now() - t0) + " · " + steps + " pasos";
+      q("s").textContent = ended ? summary() : "último paso: " + last + " · " + clock(Date.now() - t0) + (o.plain ? "" : " · " + steps + " pasos");
     }
-    function summary() { var t = sum(runs.length ? runs : stages.map(function (s) { return { usage: s.usage }; })); return stages.length + " etapa(s) · " + usageText(t); }
+    function summary() { if (o.plain) return "Registro completo en «Ver detalle»"; var t = sum(runs.length ? runs : stages.map(function (s) { return { usage: s.usage }; })); return stages.length + " etapa(s) · " + usageText(t); }
     var tick = setInterval(function () { if (ended) return clearInterval(tick); paint(); }, 1000);
 
     function openModal() {
       if (modal) return;
       var prev = document.activeElement, back = document.createElement("div"); back.className = "modal-back";
-      back.innerHTML = '<div class="modal runmodal" role="dialog" aria-modal="true" aria-labelledby="rmt"><div class="modal-h"><span class="modal-i" aria-hidden="true"><span class="spin"></span></span><h2 id="rmt">' + esc(o.title || "Generar con IA") + '</h2></div>' +
+      back.innerHTML = '<div class="modal runmodal" role="dialog" aria-modal="true" aria-labelledby="rmt"><div class="modal-h"><span class="modal-i" aria-hidden="true"><span class="spin"></span></span><h2 id="rmt">' + esc(o.title || "Trabajando") + '</h2></div>' +
         '<div class="modal-b"><div class="small mut" data-m="s"></div><ol class="runstages" data-m="p"></ol><div class="small mut" style="margin:10px 0 4px">Registro en vivo</div><pre class="log runlog" data-m="l" tabindex="0"></pre></div>' +
         '<div class="modal-f"><button class="btn" data-m="copy">Copiar registro</button><button class="btn p" data-m="x">Segundo plano</button></div></div>';
       document.body.appendChild(back);
@@ -62,7 +62,7 @@
           var modalEl = back.querySelector(".modal"); modalEl.classList.toggle("ok", ended && status === "done"); modalEl.classList.toggle("er", ended && status !== "done");
           back.querySelector(".modal-i").innerHTML = ended ? (status === "done" ? "✓" : "!") : '<span class="spin"></span>';
           m("x").textContent = ended ? "Cerrar" : "Segundo plano";
-          m("s").textContent = (ended ? (status === "done" ? "Terminó en " : "Se detuvo a los ") : "En marcha desde hace ") + clock(Date.now() - t0) + " · " + steps + " pasos de la IA" + (ended ? " · Total: " + usageText(sum(runs.length ? runs : stages.map(function (s) { return { usage: s.usage }; }))) : "");
+          m("s").textContent = (ended ? (status === "done" ? "Terminó en " : "Se detuvo a los ") : "En marcha desde hace ") + clock(Date.now() - t0) + (o.plain ? "" : " · " + steps + " pasos de la IA") + (ended && !o.plain ? " · Total: " + usageText(sum(runs.length ? runs : stages.map(function (s) { return { usage: s.usage }; }))) : "");
           m("p").innerHTML = stages.map(function (s) {
             var on = !ended && cur === s;
             return '<li class="' + (on ? "on" : s.done ? "done" : "") + '"><b>' + esc(LABEL[s.id] || s.id) + "</b> <span class=\"mut\">" + esc(s.who) + "</span>" + (s.ms ? ' <span class="mut">· ' + clock(s.ms) + "</span>" : on ? ' <span class="mut">· en curso</span>' : "") + (s.done ? '<div class="small">' + esc(s.usage ? usageText(s.usage) : s.usageLine || usageText(null)) + "</div>" : "") + "</li>";
@@ -78,6 +78,7 @@
     function push(line) {
       line = String(line); log += line + "\n";
       var m;
+      if (o.plain) { var tl = line.trim(); if (tl) last = tl.slice(0, 70); paint(); return; }
       if ((m = /^== (\w+): (.+)$/.exec(line))) {
         if (cur && !cur.done) { cur.done = true; cur.ms = Date.now() - cur.t; }
         cur = { id: m[1], who: m[2], t: Date.now(), done: false, usage: null, ms: 0 }; stages.push(cur); last = "arranca " + (LABEL[cur.id] || cur.id);

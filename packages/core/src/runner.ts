@@ -208,7 +208,15 @@ export async function prepareTarget(opts: PrepareOptions): Promise<PreparedTarge
 
     const buildCwd = join(appDir, config.build?.cwd ?? ".");
     if (opts.install && config.build?.install) {
-      await runShell(withNode(config.build.install, config.build.nodeVersion, log), buildCwd, log);
+      const inst = config.build.install;
+      try {
+        await runShell(withNode(inst, config.build.nodeVersion, log), buildCwd, log);
+      } catch (e) {
+        // `npm ci` exige un package-lock.json al día con package.json; si la rama no lo cumple, `npm install` sí funciona.
+        if (!/\bnpm\s+ci\b/.test(inst)) throw e;
+        log("npm ci ha fallado (suele ser un package-lock.json ausente o desincronizado en esta rama); reintento con npm install");
+        await runShell(withNode(inst.replace(/\bnpm\s+ci\b/, "npm install"), config.build.nodeVersion, log), buildCwd, log);
+      }
     }
     if (config.build?.command) {
       await runShell(withNode(config.build.command, config.build.nodeVersion, log), buildCwd, log);

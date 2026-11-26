@@ -160,3 +160,6 @@ pre.log::-webkit-scrollbar-track{border-left:0;background:#E7D3A0;border-radius:
 .md-it.md-custom{border-style:dashed;border-color:var(--ink)}
 .md-none{padding:8px 10px}.md-foot{padding:0 2px}
 .ai-stage.ai-loading .md-trigger{opacity:.85}
+
+.top-in>img{flex:none;box-sizing:content-box;padding:4px;background:var(--sf);border:2px solid var(--sf);border-radius:10px}
+.combo{min-width:240px}.combo .md-menu{min-width:300px}
