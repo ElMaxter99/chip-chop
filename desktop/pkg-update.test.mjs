@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
-import { describeExit, downloadPackage, installCommand, installLinuxPackage, linuxPackageKind, packageAssetUrl, runElevated } from "./pkg-update.mjs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describeExit, downloadPackage, installCommand, installLinuxPackage, linuxPackageKind, packageAssetUrl, runElevated, runInTerminal } from "./pkg-update.mjs";
 
 const fakeDeb = (n = 300000) => Buffer.concat([Buffer.from("!<arch>\n"), Buffer.alloc(n)]);
 const serve = (handler) => new Promise((ok) => { const s = createServer(handler).listen(0, "127.0.0.1", () => ok({ s, url: `http://127.0.0.1:${s.address().port}/p.deb` })); });
@@ -72,7 +75,7 @@ function fakeSpawn(code, out = "") {
 test("runElevated: éxito, contraseña cancelada (126), sin autorización (127) y sin pkexec", async () => {
   const lines = [];
   await runElevated("apt-get", ["install"], (l) => lines.push(l), { spawnImpl: fakeSpawn(0, "Unpacking x\nSetting up x\n") });
-  assert.equal(lines[0], "permisos: esperando tu contraseña de administrador");
+  assert.ok(lines[0].startsWith("permisos:"));
   assert.ok(lines.includes("permisos-ok"));
   assert.ok(lines.includes("instalando: Setting up x"));
   await assert.rejects(runElevated("x", [], () => {}, { spawnImpl: fakeSpawn(126) }), /Cancelaste/);
@@ -86,9 +89,37 @@ test("installLinuxPackage: instala, o deja el paquete y explica el comando si no
   await installLinuxPackage({ version: "0.4.5", kind: "deb", arch: "x64", log: (l) => log.push(l), impl: { download, has: () => true, elevate: async () => {} } });
   let manual = "";
   await assert.rejects(
-    installLinuxPackage({ version: "0.4.5", kind: "deb", arch: "x64", log: () => {}, onManual: (f) => (manual = f), impl: { download, has: (c) => c !== "pkexec", elevate: (c, a, l, o) => runElevated(c, a, l, o) } }),
+    installLinuxPackage({ version: "0.4.5", kind: "deb", arch: "x64", log: () => {}, onManual: (f) => (manual = f), impl: { download, has: (c) => c !== "pkexec", terminal: async () => false, elevate: (c, a, l, o) => runElevated(c, a, l, o) } }),
     /sudo apt install "\/tmp\/x\/a\.deb"/,
   );
   assert.equal(manual, "/tmp/x/a.deb");
   await assert.rejects(installLinuxPackage({ version: "0.4.5", kind: "deb", arch: "arm64", log: () => {} }), (e) => e.code === "NO_ASSET");
+});
+
+test("runElevated detecta «pkexec must be setuid root» y lo distingue de una contraseña mal puesta", async () => {
+  const spawnImpl = () => {
+    const c = new EventEmitter(); c.stdout = new EventEmitter(); c.stderr = new EventEmitter();
+    setImmediate(() => { c.stderr.emit("data", Buffer.from("pkexec must be setuid root\n")); c.emit("close", 127); });
+    return c;
+  };
+  await assert.rejects(runElevated("x", [], () => {}, { spawnImpl }), (e) => e.code === "NO_ELEVATE");
+});
+
+test("runInTerminal: sin terminal devuelve false; con terminal espera al código de salida", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-t-"));
+  assert.equal(await runInTerminal("apt-get", ["install"], dir, () => {}, { has: () => false }), false);
+  const fake = (code) => () => {
+    const c = new EventEmitter();
+    setTimeout(() => { writeFileSync(join(dir, "rc"), `${code}\n`); c.emit("close", 0); }, 30);
+    return c;
+  };
+  const lines = [];
+  assert.equal(await runInTerminal("apt-get", ["install", "-y", "/t/a b.deb"], dir, (l) => lines.push(l), { has: (c) => c === "gnome-terminal", spawnImpl: fake(0), pollMs: 10 }), true);
+  assert.ok(lines[0].startsWith("permisos:") && lines.includes("permisos-ok"));
+  const dir2 = mkdtempSync(join(tmpdir(), "cc-t-"));
+  const failing = () => { const c = new EventEmitter(); setTimeout(() => { writeFileSync(join(dir2, "rc"), "100\n"); c.emit("close", 0); }, 30); return c; };
+  await assert.rejects(runInTerminal("apt-get", [], dir2, () => {}, { has: () => true, spawnImpl: failing, pollMs: 10 }), /código 100/);
+  const dir3 = mkdtempSync(join(tmpdir(), "cc-t-"));
+  const closes = () => { const c = new EventEmitter(); setTimeout(() => c.emit("close", 1), 20); return c; };
+  await assert.rejects(runInTerminal("apt-get", [], dir3, () => {}, { has: () => true, spawnImpl: closes, pollMs: 10 }), /se cerró sin instalar/);
 });

@@ -76,7 +76,13 @@
     $("ver").innerHTML = "v" + esc(project.version) + " " + badge(update.latest + " disponible", "wa");
     b.hidden = false; b.className = "banner";
     b.innerHTML = "<strong>Versión nueva " + esc(update.latest) + (update.prerelease ? " (candidata)" : "") + '</strong><span class="grow">Se instala con un clic y se reinicia chip-chop.</span><button class="btn p" id="bn">Actualizar ahora</button>';
-    $("bn").onclick = function () { show("actualizar"); };
+    $("bn").onclick = function () { runUpdate(); };
+  }
+  // Mismo flujo desde el aviso de arriba y desde la pestaña Actualizar: ventana con el progreso.
+  function runUpdate() {
+    return window.ChipUpdate.run(function (push) {
+      return job("/api/update/install", {}, null, push).then(function (r) { if (r.status === "done") return r.result; throw new Error(""); });
+    }).then(function (r) { return checkUpdate().then(function () { return r; }); });
   }
   function checkUpdate() {
     return api("/api/update").then(function (u) { update = u; renderBanner(); return u; }).catch(function (e) { update = { error: e.message, available: false }; renderBanner(); return update; });
@@ -247,13 +253,7 @@
           u.available ? '<div class="small mut">Al actualizar se descarga el paquete de tu sistema y se instala encima. Después hay que reiniciar chip-chop (en la app de escritorio se reinicia sola).' + (u.note ? " <b>" + esc(u.note) + "</b>" : "") + ' <a href="' + esc(u.url) + '" target="_blank" rel="noopener">Ver cambios en GitHub</a></div>' : '<div class="small mut">Estás al día.</div>';
         $("upcard").innerHTML = '<div class="row"><div class="grow"><div class="small mut">Instalada</div><b style="font-size:24px">' + esc(u.current || project.version) + '</b></div><div class="grow"><div class="small mut">Disponible en tu canal</div><b style="font-size:24px">' + (u.latest ? esc(u.latest) + " " + (u.available ? badge(u.prerelease ? "Candidata" : "Versión final", u.prerelease ? "wa" : "ok") : badge("Al día", "ok")) : "—") + '</b></div><button class="btn" id="chk">Buscar ahora</button><button class="btn p" id="upd"' + (u.available && !u.note ? "" : " disabled") + '>Actualizar</button></div><div style="margin-top:16px">' + info + "</div>";
         $("chk").onclick = function () { busy(this, function () { return Promise.resolve(fill()); }); };
-        $("upd").onclick = function () {
-          var btn = this, chk = $("chk");
-          btn.disabled = true; chk.disabled = true;
-          window.ChipUpdate.run(function (push) {
-            return job("/api/update/install", {}, null, push).then(function (r) { if (r.status === "done") return r.result; throw new Error(""); });
-          }).then(function () { btn.disabled = false; chk.disabled = false; return fill(); });
-        };
+        $("upd").onclick = function () { var btn = this; btn.disabled = true; $("chk").disabled = true; runUpdate().then(function () { btn.disabled = false; $("chk").disabled = false; return fill(); }); };
       });
     }
   }

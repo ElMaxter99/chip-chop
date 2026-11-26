@@ -35,7 +35,7 @@
         if (/^error:/i.test(line)) lastErr = line.replace(/^error:\s*/i, "");
         else if ((m = /^progreso:\s*(\d+)%/.exec(line))) { cur = "dl"; pct = +m[1]; paint("Descargando… " + pct + "%"); }
         else if (/^(downloading|descargando)/i.test(line)) { cur = "dl"; pct = null; paint("Descargando la nueva versión…"); }
-        else if (/^permisos:/i.test(line)) { addPerm(); cur = "perm"; pct = null; paint("Esperando tu contraseña de administrador…", "Se abrirá la ventana de contraseña del sistema. Si no la ves, mira detrás de esta ventana."); }
+        else if (/^permisos:/i.test(line)) { addPerm(); cur = "perm"; pct = null; paint("Esperando tu contraseña de administrador…", line.replace(/^permisos:\s*/i, "") + " Si no la ves, mira detrás de esta ventana."); }
         else if (/^permisos-ok/i.test(line)) { addPerm(); cur = "ins"; pct = null; paint("Instalando…", "Permisos concedidos."); }
         else if (/^instalando:/i.test(line)) { cur = "ins"; pct = null; paint("Instalando…", line.replace(/^instalando:\s*/i, "").slice(0, 90)); }
         else if (/^installing/i.test(line)) { cur = "ins"; pct = null; paint("Instalando sobre la versión actual…"); }
