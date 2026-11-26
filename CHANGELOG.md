@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [v0.4.16](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.16) - 2026-11-26
+### Fixed
+- La vista Proyecto usa los mismos desplegables con buscador de ramas y etiquetas que Comparar.
+
 ## [v0.4.15](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.15) - 2026-11-26
 ### Added
 - Proyecto permite elegir las dos ramas del informe antes de generar con IA. Tras la generación, valida el catálogo con capturas reales de ambas ramas y muestra imágenes de muestra, fallos y cuántos pares se pueden comparar.
