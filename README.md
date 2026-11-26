@@ -108,7 +108,7 @@ Después ejecuta `chip-chop validate`: comprueba configuración, estados, flujos
 
 ### 3. Revisa el estado del proyecto
 
-La pestaña **Proyecto** («Preparar la app») son tres pasos que puedes repetir cuando cambie el código —crear `.chipchop`, generar con IA y validar— y, debajo, el **entorno** (node, git, Chromium y los CLI de IA).
+En **Proyecto** («Preparar la app»), elige la rama base y la rama a comparar. La IA recibe ambas referencias al generar el catálogo compartido de `.chipchop`. Tras generar, chip-chop levanta ambas ramas, prueba el catálogo en Chromium y muestra los pares de capturas comparables, los fallos y una imagen de muestra por rama. Puedes repetir la prueba con **Validar**. La pestaña **Comparar** conserva las referencias elegidas y usa ese mismo catálogo para el informe.
 
 ![Proyecto en la app local](docs/screenshots/ui-proyecto.png)
 

@@ -73,7 +73,7 @@
       modal.paint(); m("l").scrollTop = m("l").scrollHeight; m("x").focus();
     }
     mount(o.host);
-    openModal(); // se abre solo al empezar: así siempre se ve qué hace
+    if (o.autoOpen !== false) openModal();
 
     function push(line) {
       line = String(line); log += line + "\n";

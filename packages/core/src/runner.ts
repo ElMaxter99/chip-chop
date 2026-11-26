@@ -179,10 +179,11 @@ export async function prepareTarget(opts: PrepareOptions): Promise<PreparedTarge
   // Windows may mix 8.3 short names (RUNNER~1) and long names; resolve both sides to the same form.
   const gitRoot = realpathSync.native(git(hostAppDir, ["rev-parse", "--show-toplevel"]));
   const rel = relative(gitRoot, realpathSync.native(hostAppDir));
-  const commit = git(hostAppDir, ["rev-parse", "--short", ref]);
+  const revision = git(hostAppDir, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]);
+  const commit = git(hostAppDir, ["rev-parse", "--short", revision]);
   const worktree = mkdtempSync(join(tmpdir(), "chip-chop-wt-"));
   log(`checking out ${ref} (${commit})`);
-  git(gitRoot, ["worktree", "add", "--detach", "--force", worktree, ref]);
+  git(gitRoot, ["worktree", "add", "--detach", "--force", worktree, revision]);
   const appDir = join(worktree, rel);
 
   let server: ChildProcess | undefined;
