@@ -72,3 +72,18 @@ test("registro y resumen por etapa", () => {
   assert.equal(s.total?.input, 420);
   assert.equal(sumUsage([null, undefined]), null);
 });
+
+test("Copilot: un checkpoint posterior sin tokens no borra los anteriores; sin tokens no se muestra «0 tokens»; las sumas se redondean", () => {
+  const out = L(
+    { type: "session.usage_checkpoint", data: { totalNanoAiu: 1_000_000_000, accountingSnapshot: { tokenDetails: { input: { tokenCount: 500 }, output: { tokenCount: 50 } } } } },
+    { type: "session.usage_checkpoint", data: { totalNanoAiu: 2_000_000_000 } },
+    { type: "assistant.message", data: { content: "ok" } },
+  );
+  const u = parseOutput("copilot", out).usage!;
+  assert.equal(u.input, 500);
+  assert.equal(u.aiCredits, 2);
+  const only = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, aiCredits: 7.84, premiumRequests: 0.33 };
+  assert.equal(formatUsage(only), "7.84 AI credits · 0.33 premium requests");
+  const s = sumUsage([only, { ...only, premiumRequests: 1 }, { ...only, premiumRequests: 0.33 }, { ...only, premiumRequests: 0.33 }, { ...only, premiumRequests: 0.33 }, { ...only, premiumRequests: 0.33 }])!;
+  assert.equal(s.premiumRequests, 2.65);
+});

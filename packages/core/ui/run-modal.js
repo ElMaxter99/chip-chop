@@ -10,14 +10,15 @@
   /** «12k tokens · ≈ $0.12 · 6,76 AI credits» — solo lo que el CLI informó. */
   function usageText(u) {
     if (!u) return "sin datos de consumo (este CLI no los informa)";
-    var p = [n(billed(u)) + " tokens"];
+    var p = billed(u) > 0 ? [n(billed(u)) + " tokens"] : [];
     if (u.costUsd !== undefined) p.push("≈ $" + u.costUsd.toFixed(u.costUsd < 0.1 ? 3 : 2));
     if (u.aiCredits !== undefined) p.push(u.aiCredits.toFixed(2).replace(".", ",") + " AI credits");
-    if (u.premiumRequests !== undefined) p.push(u.premiumRequests + " premium request" + (u.premiumRequests === 1 ? "" : "s"));
-    return p.join(" · ");
+    if (u.premiumRequests !== undefined) p.push(Math.round(u.premiumRequests * 100) / 100 + " premium request" + (u.premiumRequests === 1 ? "" : "s"));
+    return p.length ? p.join(" · ") : "sin datos de consumo (este CLI no los informa)";
   }
   function sum(runs) {
     var t = null; runs.forEach(function (r) { if (!r.usage) return; t = t || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }; ["input", "output", "cacheRead", "cacheWrite", "costUsd", "aiCredits", "premiumRequests"].forEach(function (k) { if (r.usage[k] !== undefined) t[k] = (t[k] || 0) + r.usage[k]; }); });
+    if (t) ["premiumRequests", "aiCredits"].forEach(function (k) { if (t[k] !== undefined) t[k] = Math.round(t[k] * 100) / 100; });
     return t;
   }
 

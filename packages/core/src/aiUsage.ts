@@ -134,7 +134,11 @@ export function parseOutput(kind: ParserKind, stdout: string): StreamResult {
     let result: Json | undefined;
     for (const e of typed) {
       if (e.type === "assistant.message" && typeof e.data?.content === "string" && e.data.content.trim()) text = e.data.content;
-      else if (e.type === "session.usage_checkpoint") cum = copilotCheckpoint(e.data) ?? cum;
+      else if (e.type === "session.usage_checkpoint") {
+        // Los contadores son acumulados: se queda con el máximo de cada campo (un checkpoint posterior puede venir sin desglose de tokens).
+        const c = copilotCheckpoint(e.data);
+        if (c) cum = cum ? { input: Math.max(cum.input, c.input), output: Math.max(cum.output, c.output), cacheRead: Math.max(cum.cacheRead, c.cacheRead), cacheWrite: Math.max(cum.cacheWrite, c.cacheWrite), ...(Math.max(cum.aiCredits ?? 0, c.aiCredits ?? 0) ? { aiCredits: Math.max(cum.aiCredits ?? 0, c.aiCredits ?? 0) } : {}), ...(cum.premiumRequests !== undefined || c.premiumRequests !== undefined ? { premiumRequests: Math.max(cum.premiumRequests ?? 0, c.premiumRequests ?? 0) } : {}) } : c;
+      }
       else if (e.type === "result") result = e;
     }
     usage = cum;
@@ -172,6 +176,10 @@ export function sumUsage(list: Array<AiUsage | null | undefined>): AiUsage | nul
     out.cacheWrite += u.cacheWrite;
     for (const k of ["costUsd", "aiCredits", "premiumRequests", "turns"] as const) if (u[k] !== undefined) out[k] = (out[k] ?? 0) + (u[k] as number);
   }
+  // Las sumas de decimales arrastran ruido (2.6500000000000004): se redondea.
+  if (out.premiumRequests !== undefined) out.premiumRequests = Math.round(out.premiumRequests * 100) / 100;
+  if (out.aiCredits !== undefined) out.aiCredits = Math.round(out.aiCredits * 100) / 100;
+  if (out.costUsd !== undefined) out.costUsd = Math.round(out.costUsd * 10000) / 10000;
   return out;
 }
 
@@ -234,9 +242,10 @@ const fmtN = (n: number): string => (n >= 10000 ? `${(n / 1000).toFixed(n >= 100
 /** «12,3k tokens · ≈ $0.12» — una línea con lo que el CLI informó (y solo eso). */
 export function formatUsage(u: AiUsage | null | undefined): string {
   if (!u) return "sin datos de consumo (este CLI no los informa)";
-  const parts = [`${fmtN(billedTokens(u))} tokens (entrada ${fmtN(u.input)}, salida ${fmtN(u.output)}${u.cacheRead ? `, caché leída ${fmtN(u.cacheRead)}` : ""})`];
+  const parts = billedTokens(u) > 0 ? [`${fmtN(billedTokens(u))} tokens (entrada ${fmtN(u.input)}, salida ${fmtN(u.output)}${u.cacheRead ? `, caché leída ${fmtN(u.cacheRead)}` : ""})`] : [];
+  if (!parts.length && u.costUsd === undefined && u.aiCredits === undefined && u.premiumRequests === undefined) return "sin datos de consumo (este CLI no los informa)";
   if (u.costUsd !== undefined) parts.push(`≈ $${u.costUsd.toFixed(u.costUsd < 0.1 ? 3 : 2)} equivalente`);
   if (u.aiCredits !== undefined) parts.push(`${u.aiCredits.toFixed(2)} AI credits`);
-  if (u.premiumRequests !== undefined) parts.push(`${u.premiumRequests} premium request${u.premiumRequests === 1 ? "" : "s"}`);
+  if (u.premiumRequests !== undefined) parts.push(`${Math.round(u.premiumRequests * 100) / 100} premium request${u.premiumRequests === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }
