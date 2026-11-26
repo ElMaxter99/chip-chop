@@ -84,7 +84,7 @@ export function buildInvocation(p: ProviderConfig, stage: StageConfig, prompt: s
   return { command: p.command, args, ...(viaStdin ? { stdin: prompt } : {}), env, timeoutMs };
 }
 
-export async function execInvocation(inv: Invocation, cwd: string, log: (l: string) => void): Promise<{ code: number; stdout: string }> {
+export async function execInvocation(inv: Invocation, cwd: string, log: (l: string) => void): Promise<{ code: number; stdout: string; stderr: string }> {
   // Localiza el ejecutable aunque no esté en el PATH de esta app (instalador nativo de Claude Code, npm, winget…).
   const found = await resolveCommand(inv.command);
   const exe = found?.path ?? inv.command;
@@ -94,6 +94,7 @@ export async function execInvocation(inv: Invocation, cwd: string, log: (l: stri
       ? spawn(quoteForCmd(exe), inv.args.map(quoteForCmd), { cwd, env: { ...process.env, ...inv.env }, stdio: ["pipe", "pipe", "pipe"], shell: true, windowsHide: true })
       : spawn(exe, inv.args, { cwd, env: { ...process.env, ...inv.env }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     let out = "";
+    let err = "";
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
       reject(new Error(`${inv.command} timed out after ${Math.round(inv.timeoutMs / 1000)}s`));
@@ -103,14 +104,17 @@ export async function execInvocation(inv: Invocation, cwd: string, log: (l: stri
       out += s;
       for (const line of s.split("\n")) if (line.trim()) log(`  ai: ${line}`);
     });
-    child.stderr.on("data", (d: Buffer) => log(`  ai! ${d.toString().trimEnd()}`));
+    child.stderr.on("data", (d: Buffer) => {
+      err = (err + d.toString()).slice(-4000);
+      log(`  ai! ${d.toString().trimEnd()}`);
+    });
     child.on("error", (e) => {
       clearTimeout(timer);
       reject(new Error(`could not start "${inv.command}": ${e.message}. Is it installed? chip-chop also looks in the usual install folders; you can set the full path in "command:" of ai.yaml.`));
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ code: code ?? 1, stdout: out });
+      resolve({ code: code ?? 1, stdout: out, stderr: err });
     });
     if (inv.stdin !== undefined) child.stdin.end(inv.stdin);
     else child.stdin.end();
@@ -187,6 +191,10 @@ export async function runAi(opts: AiRunOptions): Promise<{ ok: boolean; issues: 
 export interface TestResult {
   ok: boolean;
   output: string;
+  /** la herramienta responde bien sin indicar modelo: lo que falla es el modelo elegido */
+  modelRejected?: boolean;
+  /** lo que el programa escribió por stderr (el motivo real cuando falla) */
+  stderr: string;
   /** qué se ejecutó, para enseñarlo al usuario */
   command: string;
   args: string[];
@@ -208,8 +216,15 @@ export async function testProvider(appDir: string, providerName: string, model?:
   const t0 = Date.now();
   try {
     const r = await execInvocation(inv, appDir, () => {});
-    return { ...base, ok: r.code === 0 && r.stdout.includes("chip-chop-ok"), output: r.stdout.trim().slice(0, 800), ms: Date.now() - t0, exitCode: r.code };
+    const good = r.code === 0 && r.stdout.includes("chip-chop-ok");
+    if (!good && model) {
+      // ¿falla la herramienta (sesión, red…) o solo ese modelo? Se prueba otra vez con el modelo por defecto.
+      const inv2 = buildInvocation({ ...p, allowedTools: [], allowTools: [], denyTools: ["shell", "write"] }, { provider: providerName }, prompt);
+      const r2 = await execInvocation(inv2, appDir, () => {}).catch(() => null);
+      if (r2 && r2.code === 0 && r2.stdout.includes("chip-chop-ok")) return { ...base, ok: false, modelRejected: true, output: r.stdout.trim().slice(0, 800), stderr: r.stderr.trim().slice(-1200), ms: Date.now() - t0, exitCode: r.code };
+    }
+    return { ...base, ok: good, output: r.stdout.trim().slice(0, 800), stderr: r.stderr.trim().slice(-1200), ms: Date.now() - t0, exitCode: r.code };
   } catch (e) {
-    return { ...base, ok: false, output: (e as Error).message, ms: Date.now() - t0, exitCode: null };
+    return { ...base, ok: false, output: (e as Error).message, stderr: "", ms: Date.now() - t0, exitCode: null };
   }
 }
