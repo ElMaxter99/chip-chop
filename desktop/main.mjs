@@ -118,15 +118,26 @@ const saveProjects = (list) => writeState({ projects: list, appDir: undefined })
 
 /** Al abrir la app desde el menú/Finder el PATH es mínimo: se toma el del shell de la persona para que se vean git, node y sus herramientas. */
 function fixPath() {
-  if (process.platform === "win32") return;
-  try {
-    const sh = process.env.SHELL || "/bin/sh";
-    const r = spawnSync(sh, ["-ilc", 'printf "%s" "$PATH"'], { encoding: "utf8", timeout: 4000 });
-    const p = String(r.stdout || "").trim().split("\n").pop();
-    if (p && p.includes("/")) process.env.PATH = p;
-  } catch {
-    /* se queda con el PATH heredado */
-  }
+  if (process.platform === "win32") return Promise.resolve();
+  // Un shell interactivo y de login (carga .bashrc/.zshrc, nvm…) puede tardar segundos: se hace sin bloquear la ventana.
+  return new Promise((resolve) => {
+    let out = "";
+    let child;
+    try {
+      child = spawn(process.env.SHELL || "/bin/sh", ["-ilc", 'printf "%s" "$PATH"'], { stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return resolve();
+    }
+    const timer = setTimeout(() => { child.kill(); resolve(); }, 4000);
+    child.stdout.on("data", (d) => (out += d));
+    child.on("error", () => { clearTimeout(timer); resolve(); });
+    child.on("close", () => {
+      clearTimeout(timer);
+      const p = out.trim().split("\n").pop();
+      if (p && p.includes("/")) process.env.PATH = p;
+      resolve();
+    });
+  });
 }
 
 async function loadCore() {
@@ -331,6 +342,14 @@ function gitCheck() {
 async function homeState(refreshAi = false) {
   let checks = [];
   let aiError = "";
+  // doctor (git, navegador, herramientas) y la lectura de modelos de la IA tardan: se lanzan a la vez.
+  let cfg0 = null;
+  try {
+    cfg0 = core.loadAiConfig(app.getPath("userData"));
+  } catch {
+    /* el error se explica más abajo */
+  }
+  const infoP = cfg0 ? core.aiInfo(cfg0, refreshAi).catch(() => ({})) : null;
   try {
     checks = await core.doctor(app.getPath("userData"));
   } catch (e) {
@@ -342,7 +361,7 @@ async function homeState(refreshAi = false) {
   try {
     const cfg = core.loadAiConfig(app.getPath("userData"));
     ai = { providers: cfg.providers, stages: cfg.stages, globalPath: core.globalAiPath(), error: "", info: {}, problems: [] };
-    ai.info = await core.aiInfo(cfg, refreshAi).catch(() => ({}));
+    ai.info = (await infoP) ?? (await core.aiInfo(cfg, refreshAi).catch(() => ({})));
     ai.problems = core.aiProblems(cfg, ai.info);
   } catch (e) {
     ai.error = String(e?.message ?? e) || aiError; // el ai.yaml global está mal escrito: la pantalla de IA lo explica
@@ -460,12 +479,24 @@ app.on("before-quit", () => {
 });
 
 app.whenReady().then(async () => {
-  fixPath();
+  // La ventana sale ya, con el logo animado, y va contando qué está haciendo mientras arranca el resto.
+  createWindow();
+  await win.loadFile(path.join(here, "home", "splash.html")).catch(() => {});
+  const boot = (m) => win?.webContents.executeJavaScript(`window.__boot&&window.__boot(${JSON.stringify(m)})`).catch(() => {});
+  const t0 = Date.now();
+  const lap = (what) => console.log(`[arranque] ${what}: ${Date.now() - t0} ms`);
   buildMenu();
   try {
+    await boot("Preparando el entorno y tus herramientas…");
+    await fixPath();
+    lap("PATH del usuario");
+    await boot("Cargando el motor de chip-chop…");
     core = await loadCore();
     registerIpc();
+    lap("motor cargado");
+    await boot("Abriendo la pantalla de inicio…");
     await goHome();
+    lap("pantalla de inicio cargada");
     if (SMOKE) {
       // prueba automática: sin diálogos ni descargas. Comprueba Inicio (preload + estado + lo nuevo) y la interfaz de un proyecto.
       playwrightCli();

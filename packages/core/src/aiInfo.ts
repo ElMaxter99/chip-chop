@@ -33,16 +33,39 @@ const CLAUDE_MODELS: ModelOption[] = [
   { value: "claude-fable-5-2", label: "Claude Fable 5.2", hint: "versión fija" },
 ];
 
-/** Los nombres válidos de `--model` los imprime `copilot help` en la descripción de la opción. */
+/** Modelos que Copilot CLI suele ofrecer (según la documentación de GitHub); sirve de respaldo si `copilot help` no los lista. */
+const COPILOT_MODELS: ModelOption[] = [
+  { value: "auto", label: "Auto", hint: "Copilot elige según disponibilidad" },
+  { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
+  { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
+  { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", hint: "rápido" },
+  { value: "claude-opus-4.6", label: "Claude Opus 4.6", hint: "el más capaz" },
+  { value: "gpt-5.4", label: "GPT-5.4" },
+  { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
+  { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+  { value: "gpt-5.2", label: "GPT-5.2" },
+  { value: "gpt-5-mini", label: "GPT-5 mini", hint: "incluido en el plan" },
+  { value: "gpt-4.1", label: "GPT-4.1", hint: "incluido en el plan" },
+  { value: "gemini-3-pro-preview", label: "Gemini 3 Pro (preview)" },
+];
+
+const ID = /^[A-Za-z0-9][\w.:/-]*$/;
+
+/** Los nombres válidos de `--model` los imprime `copilot help` en la descripción de la opción (con comillas o tras «choices:»). */
 export function parseCopilotModels(help: string): string[] {
   const i = help.indexOf("--model");
   if (i < 0) return [];
   const rest = help.slice(i);
-  const next = rest.slice(7).search(/\n\s+(-\w|--[\w-]+)/);
-  const block = next < 0 ? rest : rest.slice(0, next + 7);
+  const next = rest.slice(7).search(/\n\s+(-\w\b|--[\w-]+)/);
+  const block = (next < 0 ? rest : rest.slice(0, next + 7)).replace(/\s+/g, " ");
   const out: string[] = [];
-  for (const m of block.matchAll(/["'`]([A-Za-z0-9][\w.:/-]*)["'`]/g)) if (!out.includes(m[1]!)) out.push(m[1]!);
-  return out.filter((x) => !x.startsWith("--"));
+  const add = (x: string): void => {
+    if (ID.test(x) && !x.startsWith("--") && !out.includes(x)) out.push(x);
+  };
+  const choices = /\b(?:choices?|one of|options?|valores?)\s*:\s*([^)]*)\)?/i.exec(block);
+  if (choices) for (const part of choices[1]!.split(/[,|]/)) add((part.trim().replace(/^["'`]|["'`]$/g, "").split(/\s+/)[0] ?? "").trim());
+  for (const m of block.matchAll(/["'`]([^"'`]+)["'`]/g)) add((m[1]!.trim().split(/\s+/)[0] ?? ""));
+  return out;
 }
 
 function helpText(path: string): Promise<string> {
@@ -70,9 +93,11 @@ export async function aiInfo(cfg: ReturnType<typeof loadAiConfig>, force = false
       if (p.type === "claude") models = { options: CLAUDE_MODELS, source: "builtin", note: "Lista incluida con chip-chop. Si tu Claude Code tiene otro modelo, elige «Otro…» y escribe su nombre." };
       if (p.type === "copilot") {
         const names = found ? parseCopilotModels(await helpText(found.path)) : [];
-        models = names.length
-          ? { options: names.map((n) => ({ value: n, label: n })), source: "cli", note: "Lista leída de «copilot help». Según tu plan puede que algún modelo no esté habilitado." }
-          : { options: [], source: "builtin", note: found ? "No se pudo leer la lista de «copilot help». Escribe el modelo (los válidos salen con ese comando o con /model)." : "Instala Copilot CLI para ver sus modelos. Mientras, escribe el nombre." };
+        if (names.length >= 4) models = { options: names.map((n) => ({ value: n, label: COPILOT_MODELS.find((m) => m.value === n)?.label ?? n, ...(COPILOT_MODELS.find((m) => m.value === n)?.hint ? { hint: COPILOT_MODELS.find((m) => m.value === n)!.hint! } : {}) })), source: "cli", note: "Lista leída de «copilot help». Según tu plan puede que algún modelo no esté habilitado." };
+        else {
+          const extra = names.filter((n) => !COPILOT_MODELS.some((m) => m.value === n)).map((n) => ({ value: n, label: n }));
+          models = { options: [...COPILOT_MODELS, ...extra], source: "builtin", note: found ? "Lista habitual de Copilot CLI (no se pudo leer completa de «copilot help»). Según tu plan puede que algún modelo no esté habilitado; si usas otro, elige «Otro…» y escribe su nombre." : "Lista habitual de Copilot CLI. Instálalo para ver los modelos reales de tu plan." };
+        }
       }
       if (p.type === "codex") models = { options: [], source: "builtin", note: "Déjalo en «Predeterminado» para usar el modelo de tu ~/.codex/config.toml, o elige «Otro…» y escribe el nombre exacto que acepte tu Codex (-m)." };
       const info: ProviderInfo = { type: p.type, command, found, ...(version ? { version } : {}), models };

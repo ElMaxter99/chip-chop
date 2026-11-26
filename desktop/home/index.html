@@ -31,8 +31,10 @@ body.dropping::after{content:"Suelta la carpeta de tu app para añadirla";positi
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 body:not(.setup) #setup{display:none}body.setup #tabs,body.setup #browser,body.setup .tab{display:none}body.setup #ver{pointer-events:none}.setup-view{display:flex;flex-direction:column;gap:20px}
 </style>
+<link rel="stylesheet" href="boot.css">
 </head>
 <body>
+<div id="boot" role="status" aria-live="polite"><svg class="boot-logo" xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 64 64" aria-hidden="true"><defs><clipPath id="bu"><polygon points="-10,-10 74,-10 74,13 -10,48"/></clipPath><clipPath id="bd"><polygon points="-10,48 74,13 74,74 -10,74"/></clipPath></defs><g clip-path="url(#bu)"><g class="bl-up" fill="#2B1B0E"><path d="M10 30C10 15 22 9 32 9S54 15 54 30Z"/><rect x="29.5" y="3" width="5" height="8" rx="2"/><path d="M15 32H49C49 47 41 58 32 61 23 58 15 47 15 32Z"/></g></g><g clip-path="url(#bd)"><g class="bl-dn" fill="#B8400F"><path d="M10 30C10 15 22 9 32 9S54 15 54 30Z"/><rect x="29.5" y="3" width="5" height="8" rx="2"/><path d="M15 32H49C49 47 41 58 32 61 23 58 15 47 15 32Z"/></g></g><path class="bl-cut" d="M22 44L42 34M24 51L40 43" stroke="#fff" stroke-opacity=".85" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg><h1 class="boot-name">chip-chop</h1><div class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></div><p class="boot-msg">Arrancando…</p><p class="boot-sub"></p></div>
 <a class="skip" href="#main">Saltar al contenido</a>
 <header class="top"><div class="top-in">
   <strong class="brand">chip-chop</strong>
@@ -46,6 +48,7 @@ body:not(.setup) #setup{display:none}body.setup #tabs,body.setup #browser,body.s
   <section id="ia" class="tab" role="tabpanel" aria-labelledby="tab-ia" hidden></section>
   <section id="ajustes" class="tab" role="tabpanel" aria-labelledby="tab-ajustes" hidden></section>
 </main>
+<script src="boot.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

@@ -46,6 +46,9 @@ test("parseCopilotModels lee los nombres de la opción --model de copilot help",
   const help = `Options:\n  -h, --help   Display help\n  --model <model>  Set the AI model (choices: "claude-sonnet-4.5", "gpt-5", "gpt-5-mini")\n  --banner  Show the startup banner\n`;
   assert.deepEqual(parseCopilotModels(help), ["claude-sonnet-4.5", "gpt-5", "gpt-5-mini"]);
   assert.deepEqual(parseCopilotModels("sin opciones"), []);
+  // varias líneas, sin comillas y con nombres de visualización detrás
+  const h2 = `  --model <model>   Set the AI model to use (choices: auto, claude-sonnet-4.6,\n                    gpt-5.4, "gpt-5-mini", gemini-3-pro-preview)\n  --no-color  Disable colors\n`;
+  assert.deepEqual(parseCopilotModels(h2), ["auto", "claude-sonnet-4.6", "gpt-5.4", "gpt-5-mini", "gemini-3-pro-preview"]);
 });
 
 import { aiProblems, type ProviderInfo } from "./aiInfo.js";

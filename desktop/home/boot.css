@@ -1,0 +1,16 @@
+#boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#F1DFB8;color:#2B1B0E;font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;visibility:visible;text-align:center;padding:24px}
+#boot .boot-name{font-size:28px;font-weight:800;letter-spacing:-.01em;margin:0}
+#boot .boot-msg{font-size:15px;min-height:22px;max-width:420px;margin:0}
+#boot .boot-sub{font-size:13px;opacity:.7;max-width:420px;min-height:18px;margin:0}
+#boot .boot-dots{display:flex;gap:8px}
+#boot .boot-dots i{width:10px;height:10px;border-radius:50%;border:2px solid #2B1B0E;background:#FFF8E8;animation:bdot 1.2s ease-in-out infinite}
+#boot .boot-dots i:nth-child(2){animation-delay:.15s}#boot .boot-dots i:nth-child(3){animation-delay:.3s}
+.boot-logo{filter:drop-shadow(3px 3px 0 rgba(43,27,14,.35));overflow:visible}
+.bl-up{transform:translate(-1.6px,-3px);animation:blup 1.8s cubic-bezier(.6,0,.3,1) infinite}
+.bl-dn{transform:translate(1.6px,3px);animation:bldn 1.8s cubic-bezier(.6,0,.3,1) infinite}
+.bl-cut{transform:translate(1.6px,3px);animation:blcut 1.8s ease-in-out infinite}
+@keyframes blup{0%,100%{transform:translate(-1.6px,-3px) rotate(0)}35%{transform:translate(-9px,-14px) rotate(-6deg)}55%{transform:translate(0,0) rotate(0)}70%{transform:translate(-1.6px,-3px)}}
+@keyframes bldn{0%,100%{transform:translate(1.6px,3px) rotate(0)}35%{transform:translate(9px,14px) rotate(6deg)}55%{transform:translate(0,0) rotate(0)}70%{transform:translate(1.6px,3px)}}
+@keyframes blcut{0%,30%{opacity:0}45%,60%{opacity:1}75%,100%{opacity:.85}}
+@keyframes bdot{0%,100%{transform:translateY(0);background:#FFF8E8}40%{transform:translateY(-6px);background:#B8400F}}
+@media (prefers-reduced-motion:reduce){.bl-up,.bl-dn,.bl-cut,#boot .boot-dots i{animation:none}}

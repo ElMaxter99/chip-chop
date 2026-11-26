@@ -251,6 +251,7 @@
   }
   function finishSetup() { api.invoke("home:finishSetup").then(function () { S.setupDone = true; document.body.classList.remove("setup"); onAiSaved = null; render(); ChipAi.toast("¡Listo! Ya puedes añadir tu primer proyecto", "ok"); }, fail); }
   function render() {
+    if (window.__bootDone) window.__bootDone();
     $("ver").textContent = "v" + S.version;
     if (!S.setupDone) { renderSetup(); if (!S.smoke && !S.chromium.installed && !installingChromium && !chromiumFailed && !autoTried) { autoTried = true; startChromium(); } return; }
     document.body.classList.remove("setup");
