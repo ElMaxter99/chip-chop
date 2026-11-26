@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 /** Ficheros que determinan el aspecto de las capturas de la documentación. */
-export const UI_SOURCES = ["packages/core/ui/index.html", "packages/core/ui/app.js", "packages/core/ui/ai-editor.js", "packages/core/ui/update-modal.js", "packages/core/ui/style.css", "packages/core/ui/favicon.svg", "desktop/home", "desktop/build/icon.png", "docs/assets/logo.svg"];
+export const UI_SOURCES = ["packages/core/ui/index.html", "packages/core/ui/app.js", "packages/core/ui/ai-editor.js", "packages/core/ui/update-modal.js", "packages/core/ui/run-modal.js", "packages/core/ui/style.css", "packages/core/ui/favicon.svg", "desktop/home", "desktop/build/icon.png", "docs/assets/logo.svg"];
 
 function listFiles(root, rel) {
   const p = join(root, rel);

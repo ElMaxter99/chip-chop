@@ -108,7 +108,7 @@
     var s2 = step(2, "Generar con IA", esc(disc) + " lee el código y escribe estados, flujos y mocks.", (aiBad.length ? badge("Revisar la IA", "wa") : p.hasCatalog ? (generated ? badge(k.states + " estados · " + k.mocks + " mocks", "ok") : badge("Pendiente")) : badge("Falta el paso 1", "wa")), '<button class="btn p" id="gen"' + (p.hasCatalog ? "" : " disabled") + ">" + (generated ? "Volver a generar" : "Generar con IA") + "</button>");
     var s3 = step(3, "Validar", "Comprueba que todo lo generado es coherente.", '<span id="valst">' + badge("Sin comprobar") + "</span>", '<button class="btn" id="val"' + (p.hasCatalog ? "" : " disabled") + ">Validar</button>");
     c.innerHTML = '<div><h1>Preparar la app</h1><p class="sub">Tres pasos. Puedes repetir cualquiera cuando cambie el código.</p></div>' + s1 + s2 + s3 +
-      '<pre class="log" id="log1" hidden></pre><div class="card"><h2>Entorno</h2><div id="env" class="mut">Comprobando…</div></div>';
+      '<div id="genRun" hidden></div><pre class="log" id="log1" hidden></pre><div class="card"><h2>Entorno</h2><div id="env" class="mut">Comprobando…</div></div>';
     if ($("init")) $("init").onclick = function () { api("/api/init", "POST", { framework: $("fw").value }).then(load); };
     $("gen").onclick = function () {
       busy(this, function () {
@@ -116,9 +116,11 @@
           aiInfo = info;
           var probs = ChipAi.problems(ai && ai.stages ? ai.stages : {}, info);
           if (probs.length) return needAiConfig(probs);
-          var lines = [];
-          return job("/api/ai/run", {}, "log1", function (l) { lines.push(l); }).then(function (r) {
+          var lines = [], host = $("genRun"), rn = window.ChipRun.start({ host: host, title: "Generar con IA" });
+          return job("/api/ai/run", {}, null, function (l) { lines.push(l); rn.push(l); }).then(function (r) {
+            rn.finish(r.status, r.result);
             return load().then(function () {
+              rn.attach($("genRun"));
               if (r.status === "failed") {
                 if (/model|modelo/i.test(lines.join("\n")) && /(not found|invalid|unknown|unsupported|does not exist|not available|no existe|no disponible)/i.test(lines.join("\n"))) return needAiConfig([{ stage: "IA", message: "la herramienta rechazó el modelo elegido" }]);
                 notify("La generación con IA ha fallado. Revisa el registro de debajo para ver el motivo.", "La generación falló");
@@ -162,7 +164,7 @@
       clearInterval(tick);
       head.className = "modal " + (t.ok ? "ok" : "er"); icon.innerHTML = t.ok ? "✓" : "!"; back.querySelector("h2").textContent = t.ok ? "«" + title + "» funciona" : "«" + title + "» no funciona";
       var cmd = (t.foundAt || t.command) + " " + t.args.join(" ");
-      box.innerHTML = '<p style="margin:0 0 10px">' + (t.ok ? "<b>" + esc(v.provider) + "</b> respondió correctamente en " + (t.ms / 1000).toFixed(1) + " s." : "No se obtuvo la respuesta esperada (" + (t.ms / 1000).toFixed(1) + " s" + (t.exitCode != null ? ", código de salida " + t.exitCode : "") + ").") + "</p>" +
+      box.innerHTML = '<p style="margin:0 0 10px">' + (t.ok ? "<b>" + esc(v.provider) + "</b> respondió correctamente en " + (t.ms / 1000).toFixed(1) + " s." : "No se obtuvo la respuesta esperada (" + (t.ms / 1000).toFixed(1) + " s" + (t.exitCode != null ? ", código de salida " + t.exitCode : "") + ").") + "</p>" + (t.usage ? '<p class="small mut" style="margin:-4px 0 10px">Consumo de la prueba: ' + esc(window.ChipRun.usageText(t.usage)) + "</p>" : "") +
         (t.ok ? "" : '<p class="small" style="margin:0 0 8px">' + (t.modelRejected ? "<b>La herramienta funciona</b> (con su modelo por defecto sí responde), pero <b>rechaza el modelo «" + esc(t.model) + "»</b>: no existe con ese nombre o tu plan no lo tiene habilitado. Elige otro de la lista o déjalo en «Predeterminado»." : t.foundAt ? "El programa se encontró, pero falló al responder: revisa que hayas iniciado sesión (ejecútalo una vez en una terminal) y que el modelo exista." : "No se encontró el programa «" + esc(t.command) + "». Instálalo o indica su ruta en ai.yaml.") + "</p>") +
         (!t.ok && t.stderr ? '<div class="small mut">Lo que dijo el programa (el motivo)</div><pre class="log" style="margin-bottom:10px">' + esc(t.stderr) + "</pre>" : "") + '<div class="small mut">Respuesta</div><pre class="log">' + esc(t.output || "(vacía)") + '</pre><details style="margin-top:10px"><summary class="small mut" style="cursor:pointer">Qué se ejecutó</summary><pre class="log" style="margin-top:6px">' + esc(cmd) + '\n\nPetición: ' + esc(t.prompt) + '</pre></details>';
       var f = back.querySelector(".modal-f"); f.innerHTML = (t.ok ? "" : '<button class="btn" id="tagain">Reintentar</button>') + '<button class="btn p" id="tclose2">Cerrar</button>';
@@ -174,11 +176,11 @@
   function renderIa() {
     Promise.all([api("/api/ai"), api("/api/ai/info")]).then(function (r) {
       var cfg = r[0], info = r[1]; ai = cfg; aiInfo = info;
-      var ex = function (s) { return '<div class="row"><button class="btn" data-test="' + s + '">Probar esta etapa</button><span data-res="' + s + '"></span></div>'; };
+      var ex = function (s) { return '<div class="row"><button class="btn" data-test="' + s + '">Probar esta etapa</button><span data-res="' + s + '"></span></div><div class="small mut ai-use" data-use="' + s + '">Consumo: sin ejecuciones todavía.</div>'; };
       $("ia").innerHTML = '<div><h1>Modelos por etapa</h1><p class="sub">Cada etapa puede usar otra herramienta y otro modelo. Lo que cambies se guarda solo. Si tu CLI tiene un modelo que no sale en la lista, usa «Otro…».</p></div>' +
         (Object.keys(info).every(function (n) { return !info[n].found; }) ? '<div class="banner er"><strong>No se encuentra ninguna herramienta de IA.</strong><span class="grow">Instala Claude Code, GitHub Copilot CLI u OpenAI Codex e inicia sesión una vez en una terminal. chip-chop busca en el PATH y en las carpetas habituales de instalación; al abrir una lista vuelve a buscar.</span></div>' : "") +
         '<div class="card" id="aiEd"></div>' +
-        '<div class="row"><label class="f">Reintentos de reparación<input type="number" id="maxr" min="0" max="10" value="' + cfg.settings.maxRepairs + '" style="width:90px"></label></div><p class="mut small">Comandos y argumentos avanzados: archivo .chipchop/ai.yaml (por app) o la carpeta de usuario (para todas).</p>';
+        '<div class="row"><label class="f">Reintentos de reparación<input type="number" id="maxr" min="0" max="10" value="' + cfg.settings.maxRepairs + '" style="width:90px"></label></div><div class="card" id="aiUse" hidden></div><p class="mut small">Comandos y argumentos avanzados: archivo .chipchop/ai.yaml (por app) o la carpeta de usuario (para todas).</p>';
       var root = $("aiEd"), opts = {
         stages: STAGES, cfg: cfg, info: info, extra: ex,
         refresh: function () { return api("/api/ai/info?refresh=1"); },
@@ -187,6 +189,14 @@
       root.innerHTML = ChipAi.rows(opts);
       var ed = ChipAi.bind(root, opts);
       $("maxr").onchange = ed.changed;
+      api("/api/ai/usage").then(function (u) {
+        (u.stages || []).forEach(function (st) {
+          var el = root.querySelector('[data-use="' + st.stage + '"]'); if (!el || !st.last) return;
+          var d = new Date(st.last.at);
+          el.innerHTML = "<b>Última ejecución</b> (" + esc(st.last.provider + (st.last.model ? " / " + st.last.model : "")) + ", " + d.toLocaleDateString() + " " + d.toLocaleTimeString().slice(0, 5) + ", " + Math.round(st.last.ms / 1000) + " s): " + esc(window.ChipRun.usageText(st.last.usage)) + (st.runs > 1 ? "<br><b>Acumulado</b> en " + st.runs + " ejecuciones: " + esc(window.ChipRun.usageText(st.total)) : "");
+        });
+        if (u.total && (u.stages || []).length) { var box = $("aiUse"); box.hidden = false; box.innerHTML = "<h2>Lo que ha gastado la IA en esta app</h2><div>" + esc(window.ChipRun.usageText(u.total)) + '</div><p class="mut small" style="margin:6px 0 0">Los números salen de lo que informa cada herramienta tras cada ejecución. Claude Code da un coste <b>equivalente</b> en dólares (con suscripción no se cobra por token: cuenta contra tus límites); Copilot da AI credits y premium requests; Codex solo tokens. Si una herramienta no informa algo, no se estima.</p>'; }
+      }, function () {});
       root.querySelectorAll("[data-test]").forEach(function (b) {
         b.onclick = function () {
           var s = b.dataset.test, row = root.querySelector('.ai-stage[data-stage="' + s + '"]'), res = root.querySelector('[data-res="' + s + '"]');

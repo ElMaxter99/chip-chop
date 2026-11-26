@@ -134,3 +134,29 @@ pre.log::-webkit-scrollbar-track{border-left:0;background:#E7D3A0;border-radius:
 @keyframes chipspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 .modal-i .spin{margin:0}
+
+/* franja de progreso de «Generar con IA» y su ventana de detalle */
+.runstrip{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px 14px;border:2px solid var(--ink);border-radius:8px;background:var(--bg);box-shadow:3px 3px 0 var(--ink)}
+.runstrip.ok{background:var(--ok)}.runstrip.er{background:#F6C4BA}
+.runstrip-i{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;font-weight:800}
+.runstrip .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.runmodal{width:min(760px,100%)}
+.runstages{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.runstages li{padding:8px 10px;border:2px solid var(--ink);border-radius:8px;background:var(--bg)}
+.runstages li.on{background:var(--wa)}.runstages li.done{background:var(--sf)}
+.runlog{max-height:280px;min-height:140px}
+
+/* selector de modelo con buscador */
+.mdsel{position:relative}
+.md-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;padding:10px 12px;border:2px solid var(--ink);border-radius:8px;background:var(--sf);color:var(--ink);font:inherit;font-weight:700;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.md-trigger:hover{background:#FFF1CF}.md-trigger[aria-expanded="true"]{background:var(--wa)}
+.md-trigger span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.md-menu{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 6px);padding:8px;background:var(--sf);border:2px solid var(--ink);border-radius:8px;box-shadow:3px 3px 0 var(--ink);display:flex;flex-direction:column;gap:8px}
+.md-menu[hidden]{display:none}
+.md-search{width:100%;box-sizing:border-box}
+.md-list{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.md-it{display:flex;flex-direction:column;gap:1px;padding:7px 10px;border:2px solid transparent;border-radius:8px;cursor:pointer}
+.md-it.act{border-color:var(--ink);background:#FFF1CF}.md-it.on{background:var(--acs)}
+.md-it.md-custom{border-style:dashed;border-color:var(--ink)}
+.md-none{padding:8px 10px}.md-foot{padding:0 2px}
+.ai-stage.ai-loading .md-trigger{opacity:.85}

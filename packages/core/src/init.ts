@@ -124,7 +124,7 @@ export function initProject(appDir: string, opts: InitOptions): { created: strin
   put("flows/home.flow.yaml", FLOW_TEMPLATE);
   put("mocks/.gitkeep", "");
   put("ai.yaml", AI_TEMPLATE);
-  put(".gitignore", "runs/\nreports/\n");
+  put(".gitignore", "runs/\nreports/\nai-usage.jsonl\n");
 
   // The guides travel with the app so any AI that opens this repo can read them.
   const aiDir = join(dir, "ai");

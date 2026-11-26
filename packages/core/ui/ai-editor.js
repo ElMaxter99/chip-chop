@@ -49,7 +49,8 @@
       var sc = o.cfg.stages[s[0]] || { provider: names[0] }, m = modelSelect(o.info, sc.provider, sc.model);
       return '<div class="ai-stage" data-stage="' + s[0] + '" data-title="' + esc(s[1]) + '"><div class="ai-name"><b>' + esc(s[1]) + '</b><div class="mut small">' + esc(s[2]) + '</div></div>' +
         '<div class="ai-prov">' + picker(s[1], names, sc.provider, o.info) + "</div>" +
-        '<div class="ai-model"><label class="f">Modelo<select class="ai-sel" aria-label="Modelo de ' + esc(s[1]) + '">' + m.html + '</select></label><input type="text" class="ai-other" placeholder="Nombre exacto del modelo" aria-label="Otro modelo de ' + esc(s[1]) + '" value="' + esc(m.other) + '"' + (m.other || (m.html.indexOf('value="' + OTHER + '" selected') >= 0) ? "" : " hidden") + '><div class="small mut ai-note">' + esc(m.note) + "</div></div>" +
+        '<div class="ai-model"><span class="f">Modelo</span><div class="mdsel"><button type="button" class="md-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Modelo de ' + esc(s[1]) + '"></button><div class="md-menu" hidden><input type="text" class="md-search" placeholder="Buscar o escribir un modelo…" aria-label="Buscar modelo de ' + esc(s[1]) + '" autocomplete="off" spellcheck="false"><ul class="md-list" role="listbox"></ul><div class="md-foot small mut"></div></div></div>' +
+        '<select class="ai-sel" hidden aria-hidden="true" tabindex="-1">' + m.html + '</select><input type="text" class="ai-other" hidden value="' + esc(m.other) + '"><div class="small mut ai-note">' + esc(m.note) + "</div></div>" +
         (o.extra ? '<div class="ai-extra">' + o.extra(s[0]) + "</div>" : "") + "</div>";
     }).join("") + "</div>";
   }
@@ -111,24 +112,66 @@
       var cur = sel.value === OTHER ? other.value.trim() : sel.value, m = modelSelect(o.info, prov, cur);
       // al cambiar de herramienta, un modelo que no existe en la nueva vuelve a «Predeterminado»
       if (resetIfUnknown && cur && !((o.info[prov] && o.info[prov].models.options) || []).some(function (x) { return x.value === cur; })) { cur = ""; m = modelSelect(o.info, prov, ""); }
-      sel.innerHTML = m.html; other.hidden = !(sel.value === OTHER); if (other.hidden) other.value = m.other || ""; if (!other.hidden) other.value = m.other || cur;
-      row.querySelector(".ai-note").textContent = m.note;
+      sel.innerHTML = m.html; other.hidden = true; other.value = sel.value === OTHER ? (m.other || cur) : "";
+      row.querySelector(".ai-note").textContent = m.note; row.classList.remove("ai-loading"); syncModel(row);
     }
     // Vuelve a buscar herramientas y modelos; refresca tarjetas y listas sin perder lo elegido.
     function rescan(row) {
       if (!o.refresh) return Promise.resolve();
-      if (row) row.querySelector(".ai-note").textContent = "Buscando los modelos disponibles…";
+      if (row) { row.querySelector(".ai-note").textContent = "Buscando los modelos disponibles…"; row.classList.add("ai-loading"); syncModel(row); }
       return Promise.resolve(o.refresh()).then(function (r) {
         var fresh = Object.assign({}, (r && r.info) || r); Object.keys(o.info).forEach(function (k) { delete o.info[k]; }); Object.assign(o.info, fresh);
         repaintCards(); el.querySelectorAll(".ai-stage").forEach(function (r2) { reloadModels(r2); }); banner();
       }, function () { if (row) reloadModels(row); });
     }
+    // ---- Selector de modelo con buscador (el <select> oculto guarda el valor; esto es solo la cara) ----
+    function curModel(row) { var sel = row.querySelector(".ai-sel"), other = row.querySelector(".ai-other"); return sel.value === OTHER ? other.value.trim() : sel.value; }
+    function syncModel(row) {
+      var sel = row.querySelector(".ai-sel"), tr = row.querySelector(".md-trigger"), loading = row.classList.contains("ai-loading");
+      var opt = sel.options[sel.selectedIndex], txt = sel.value === OTHER ? (row.querySelector(".ai-other").value.trim() || "Otro…") : opt ? opt.textContent : "Predeterminado del CLI";
+      tr.innerHTML = (loading ? '<span class="spin"></span> <span class="mut">Cargando modelos…</span>' : "<span>" + esc(txt) + "</span>") + '<span class="pv-caret" aria-hidden="true">▾</span>';
+      if (!row.querySelector(".md-menu").hidden) fillModels(row);
+    }
+    function fillModels(row) {
+      var sel = row.querySelector(".ai-sel"), q = row.querySelector(".md-search").value.trim(), ql = q.toLowerCase(), ul = row.querySelector(".md-list"), cur = curModel(row);
+      var all = [].slice.call(sel.options).filter(function (o) { return o.value !== OTHER; }).map(function (o) { return { v: o.value, t: o.textContent }; });
+      var shown = all.filter(function (o) { return !ql || o.t.toLowerCase().indexOf(ql) >= 0 || o.v.toLowerCase().indexOf(ql) >= 0; });
+      var html = shown.map(function (o) { return '<li role="option" class="md-it' + (o.v === cur ? " on" : "") + '" data-v="' + esc(o.v) + '" aria-selected="' + (o.v === cur) + '"><b>' + esc(o.v === "" ? "Predeterminado del CLI" : o.t.split(" — ")[0]) + "</b>" + (o.v === "" ? '<span class="mut small">el modelo que use tu CLI por defecto</span>' : o.v !== o.t.split(" — ")[0] ? '<span class="mut small">' + esc(o.v + (o.t.indexOf(" — ") > 0 ? " · " + o.t.split(" — ")[1] : "")) + "</span>" : o.t.indexOf(" — ") > 0 ? '<span class="mut small">' + esc(o.t.split(" — ")[1]) + "</span>" : "") + "</li>"; }).join("");
+      if (q && !all.some(function (o) { return o.v.toLowerCase() === ql; })) html += '<li role="option" class="md-it md-custom" data-custom="' + esc(q) + '"><b>Usar «' + esc(q) + '»</b><span class="mut small">nombre exacto que acepta tu herramienta</span></li>';
+      ul.innerHTML = html || '<li class="md-none mut small">Sin resultados</li>';
+      var real = all.filter(function (o) { return o.v; }).length;
+      row.querySelector(".md-foot").textContent = row.classList.contains("ai-loading") ? "Cargando la lista de la herramienta…" : real ? real + " modelo" + (real === 1 ? "" : "s") + " de tu herramienta" + (q ? " · " + shown.filter(function (o) { return o.v; }).length + " coinciden" : "") : "Esta herramienta no publica su lista: escribe el nombre exacto arriba.";
+    }
+    el.querySelectorAll(".ai-stage").forEach(function (row) {
+      var msel = row.querySelector(".mdsel"), mtr = row.querySelector(".md-trigger"), mmenu = row.querySelector(".md-menu"), msearch = row.querySelector(".md-search"), mact = -1;
+      function mitems() { return [].slice.call(mmenu.querySelectorAll(".md-it")); }
+      function mmark(i) { var it = mitems(); if (!it.length) return; mact = Math.max(0, Math.min(it.length - 1, i)); it.forEach(function (l, k) { l.classList.toggle("act", k === mact); }); it[mact].scrollIntoView({ block: "nearest" }); }
+      function mclose(focus) { mmenu.hidden = true; mtr.setAttribute("aria-expanded", "false"); if (focus) mtr.focus(); }
+      function mopen() { el.querySelectorAll(".md-menu").forEach(function (x) { if (x !== mmenu) x.hidden = true; }); mmenu.hidden = false; mtr.setAttribute("aria-expanded", "true"); msearch.value = ""; fillModels(row); var it = mitems(), on = it.findIndex(function (l) { return l.classList.contains("on"); }); mmark(on < 0 ? 0 : on); msearch.focus(); }
+      function mchoose(li) {
+        var sel = row.querySelector(".ai-sel"), other = row.querySelector(".ai-other");
+        if (li.dataset.custom !== undefined) { var name = li.dataset.custom; var known = [].slice.call(sel.options).filter(function (o) { return o.value === name; })[0]; if (known) sel.value = name; else { sel.value = OTHER; other.value = name; } }
+        else { sel.value = li.dataset.v; other.value = ""; }
+        mclose(true); syncModel(row); changed();
+      }
+      mtr.onclick = function () { mmenu.hidden ? mopen() : mclose(false); };
+      mtr.onkeydown = function (e) { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); mopen(); } };
+      msearch.oninput = function () { fillModels(row); mmark(0); };
+      msearch.onkeydown = function (e) {
+        if (e.key === "ArrowDown") { e.preventDefault(); mmark(mact + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); mmark(mact - 1); }
+        else if (e.key === "Enter") { e.preventDefault(); var it = mitems(); if (it[mact]) mchoose(it[mact]); }
+        else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); mclose(true); }
+        else if (e.key === "Tab") mclose(false);
+      };
+      mmenu.onmousedown = function (e) { var li = e.target.closest && e.target.closest(".md-it"); if (li) { e.preventDefault(); mchoose(li); } };
+      syncModel(row);
+    });
+    document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".mdsel")) el.querySelectorAll(".md-menu").forEach(function (x) { x.hidden = true; var t = x.parentNode.querySelector(".md-trigger"); if (t) t.setAttribute("aria-expanded", "false"); }); });
     el.querySelectorAll(".ai-stage").forEach(function (row) {
       var sel = row.querySelector(".ai-sel"), other = row.querySelector(".ai-other"), d = row.querySelector(".pvsel"), trig = d.querySelector(".pv-trigger"), menu = d.querySelector(".pv-menu");
       var items = function () { return [].slice.call(menu.querySelectorAll("li")); }, active = -1;
       function closeAll(except) { el.querySelectorAll(".pvsel").forEach(function (x) { if (x === except) return; x.querySelector(".pv-menu").hidden = true; x.querySelector(".pv-trigger").setAttribute("aria-expanded", "false"); }); }
-      sel.onchange = function () { other.hidden = sel.value !== OTHER; if (!other.hidden) other.focus(); else changed(); };
-      other.onchange = changed;
       function mark(i) { var it = items(); active = Math.max(0, Math.min(it.length - 1, i)); it.forEach(function (l, k) { l.classList.toggle("act", k === active); }); it[active].scrollIntoView({ block: "nearest" }); }
       function open() { closeAll(d); menu.hidden = false; trig.setAttribute("aria-expanded", "true"); mark(items().findIndex(function (l) { return l.dataset.v === d.dataset.value; })); menu.focus(); rescan(null); }
       function close(focus) { menu.hidden = true; trig.setAttribute("aria-expanded", "false"); if (focus) trig.focus(); }

@@ -7,6 +7,7 @@ import { chipDir } from "./paths.js";
 import type { AiSettings, ProviderConfig, StageConfig, StageName } from "./types.js";
 import { formatIssues, validateAgainst, validateCatalogDir } from "./validate.js";
 import { readFileSync } from "node:fs";
+import { describeEvent, formatUsage, parseOutput, recordRun, type AiUsage, type ParserKind, type StageRun } from "./aiUsage.js";
 
 export const STAGES: StageName[] = ["discover", "flows", "mocks", "repair"];
 
@@ -56,6 +57,8 @@ export interface Invocation {
   stdin?: string;
   env: Record<string, string>;
   timeoutMs: number;
+  /** cómo leer la salida del CLI (eventos JSON) para enseñar los pasos y medir el consumo */
+  parser?: ParserKind;
 }
 
 /** Turns provider + stage settings into a concrete process to spawn. Pure, so it is unit-testable. */
@@ -65,17 +68,17 @@ export function buildInvocation(p: ProviderConfig, stage: StageConfig, prompt: s
   const env = p.env ?? {};
   const timeoutMs = p.timeoutMs ?? 900000;
   if (p.type === "claude") {
-    const args = ["-p", ...(model ? ["--model", model] : []), "--output-format", "text", "--permission-mode", p.permissionMode ?? "acceptEdits", "--allowedTools", (p.allowedTools ?? ["Read", "Glob", "Grep", "Write", "Edit"]).join(","), ...extra];
-    return { command: p.command ?? "claude", args, stdin: prompt, env, timeoutMs };
+    const args = ["-p", ...(model ? ["--model", model] : []), "--output-format", "stream-json", "--verbose", "--permission-mode", p.permissionMode ?? "acceptEdits", "--allowedTools", (p.allowedTools ?? ["Read", "Glob", "Grep", "Write", "Edit"]).join(","), ...extra];
+    return { command: p.command ?? "claude", args, stdin: prompt, env, timeoutMs, parser: "claude" };
   }
   if (p.type === "copilot") {
-    const args = ["-p", prompt, ...(model ? ["--model", model] : []), ...(p.allowTools ?? ["write"]).map((t) => `--allow-tool=${t}`), ...(p.denyTools ?? ["shell"]).map((t) => `--deny-tool=${t}`), "-s", ...extra];
-    return { command: p.command ?? "copilot", args, env, timeoutMs };
+    const args = ["-p", prompt, ...(model ? ["--model", model] : []), ...(p.allowTools ?? ["write"]).map((t) => `--allow-tool=${t}`), ...(p.denyTools ?? ["shell"]).map((t) => `--deny-tool=${t}`), "--output-format", "json", ...extra];
+    return { command: p.command ?? "copilot", args, env, timeoutMs, parser: "copilot" };
   }
   if (p.type === "codex") {
     // `codex exec` es el modo no interactivo; el prompt entra por stdin ("-"). Necesita poder escribir .chipchop/, pero nada más.
-    const args = ["exec", "--sandbox", p.sandbox ?? "workspace-write", "--skip-git-repo-check", "--color", "never", ...(model ? ["--model", model] : []), ...extra, "-"];
-    return { command: p.command ?? "codex", args, stdin: prompt, env, timeoutMs };
+    const args = ["exec", "--sandbox", p.sandbox ?? "workspace-write", "--skip-git-repo-check", "--color", "never", "--json", ...(model ? ["--model", model] : []), ...extra, "-"];
+    return { command: p.command ?? "codex", args, stdin: prompt, env, timeoutMs, parser: "codex" };
   }
   if (!p.command) throw new Error("custom provider needs a `command`");
   const sub = (s: string): string => s.replaceAll("{prompt}", prompt).replaceAll("{model}", model ?? "");
@@ -84,7 +87,7 @@ export function buildInvocation(p: ProviderConfig, stage: StageConfig, prompt: s
   return { command: p.command, args, ...(viaStdin ? { stdin: prompt } : {}), env, timeoutMs };
 }
 
-export async function execInvocation(inv: Invocation, cwd: string, log: (l: string) => void): Promise<{ code: number; stdout: string; stderr: string }> {
+export async function execInvocation(inv: Invocation, cwd: string, log: (l: string) => void): Promise<{ code: number; stdout: string; stderr: string; usage: AiUsage | null; isError: boolean }> {
   // Localiza el ejecutable aunque no esté en el PATH de esta app (instalador nativo de Claude Code, npm, winget…).
   const found = await resolveCommand(inv.command);
   const exe = found?.path ?? inv.command;
@@ -99,10 +102,22 @@ export async function execInvocation(inv: Invocation, cwd: string, log: (l: stri
       child.kill("SIGTERM");
       reject(new Error(`${inv.command} timed out after ${Math.round(inv.timeoutMs / 1000)}s`));
     }, inv.timeoutMs);
+    // Con eventos JSON se enseñan pasos legibles («lee x», «escribe y»); si el CLI no los emite, la línea tal cual.
+    let pending = "";
+    const show = (line: string): void => {
+      if (!line.trim()) return;
+      if (inv.parser && line.trimStart().startsWith("{")) {
+        for (const l of describeEvent(inv.parser, line)) log(`  ai: ${l}`);
+        return;
+      }
+      log(`  ai: ${line}`);
+    };
     child.stdout.on("data", (d: Buffer) => {
       const s = d.toString();
       out += s;
-      for (const line of s.split("\n")) if (line.trim()) log(`  ai: ${line}`);
+      const parts = (pending + s).split("\n");
+      pending = parts.pop() ?? "";
+      for (const line of parts) show(line);
     });
     child.stderr.on("data", (d: Buffer) => {
       err = (err + d.toString()).slice(-4000);
@@ -114,7 +129,9 @@ export async function execInvocation(inv: Invocation, cwd: string, log: (l: stri
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ code: code ?? 1, stdout: out, stderr: err });
+      show(pending);
+      const parsed = inv.parser ? parseOutput(inv.parser, out) : null;
+      resolve({ code: code ?? 1, stdout: parsed?.parsed ? parsed.text : out, stderr: err, usage: parsed?.usage ?? null, isError: parsed?.isError ?? false });
     });
     if (inv.stdin !== undefined) child.stdin.end(inv.stdin);
     else child.stdin.end();
@@ -155,10 +172,11 @@ export interface AiRunOptions {
 }
 
 /** discover -> flows -> mocks, then validate and repair until clean or out of attempts. */
-export async function runAi(opts: AiRunOptions): Promise<{ ok: boolean; issues: string }> {
+export async function runAi(opts: AiRunOptions): Promise<{ ok: boolean; issues: string; runs: StageRun[] }> {
   const log = opts.log ?? (() => {});
   const cfg = loadAiConfig(opts.appDir);
   const stages = opts.stages ?? (["discover", "flows", "mocks"] as StageName[]);
+  const runs: StageRun[] = [];
   const run = async (stage: StageName, vars: { extra?: string; problems?: string }): Promise<void> => {
     const sc = cfg.stages[stage];
     if (!sc) throw new Error(`no configuration for stage "${stage}"`);
@@ -170,21 +188,26 @@ export async function runAi(opts: AiRunOptions): Promise<{ ok: boolean; issues: 
       log(`  would run: ${inv.command} ${inv.args.map((a) => (a.length > 60 ? `${a.slice(0, 57)}...` : a)).join(" ")}`);
       return;
     }
+    const t0 = Date.now();
     const r = await execInvocation(inv, opts.appDir, log);
+    const rec: StageRun = { at: new Date().toISOString(), stage, provider: sc.provider, model: sc.model ?? "", ms: Date.now() - t0, ok: r.code === 0 && !r.isError, usage: r.usage };
+    runs.push(rec);
+    recordRun(opts.appDir, rec);
+    log(`  uso: ${formatUsage(r.usage)} · ${(rec.ms / 1000).toFixed(0)} s`);
     if (r.code !== 0) throw new Error(`${stage} stage failed (exit ${r.code})`);
   };
   for (const s of stages) await run(s, { extra: opts.extra });
-  if (opts.dryRun) return { ok: true, issues: "" };
+  if (opts.dryRun) return { ok: true, issues: "", runs };
   for (let i = 0; i <= cfg.settings.maxRepairs; i++) {
     const issues = validateCatalogDir(opts.appDir);
     const errors = issues.filter((x) => x.severity === "error");
-    if (errors.length === 0) return { ok: true, issues: "" };
+    if (errors.length === 0) return { ok: true, issues: "", runs };
     const text = formatIssues(errors);
-    if (i === cfg.settings.maxRepairs) return { ok: false, issues: text };
+    if (i === cfg.settings.maxRepairs) return { ok: false, issues: text, runs };
     log(`validation found ${errors.length} problem(s); repair attempt ${i + 1}/${cfg.settings.maxRepairs}`);
     await run("repair", { problems: text, extra: opts.extra });
   }
-  return { ok: false, issues: "" };
+  return { ok: false, issues: "", runs };
 }
 
 /** Small round-trip to confirm a provider answers with the configured model. */
@@ -195,6 +218,8 @@ export interface TestResult {
   modelRejected?: boolean;
   /** lo que el programa escribió por stderr (el motivo real cuando falla) */
   stderr: string;
+  /** consumo de la prueba, si el CLI lo informa */
+  usage?: AiUsage | null;
   /** qué se ejecutó, para enseñarlo al usuario */
   command: string;
   args: string[];
@@ -221,9 +246,9 @@ export async function testProvider(appDir: string, providerName: string, model?:
       // ¿falla la herramienta (sesión, red…) o solo ese modelo? Se prueba otra vez con el modelo por defecto.
       const inv2 = buildInvocation({ ...p, allowedTools: [], allowTools: [], denyTools: ["shell", "write"] }, { provider: providerName }, prompt);
       const r2 = await execInvocation(inv2, appDir, () => {}).catch(() => null);
-      if (r2 && r2.code === 0 && r2.stdout.includes("chip-chop-ok")) return { ...base, ok: false, modelRejected: true, output: r.stdout.trim().slice(0, 800), stderr: r.stderr.trim().slice(-1200), ms: Date.now() - t0, exitCode: r.code };
+      if (r2 && r2.code === 0 && r2.stdout.includes("chip-chop-ok")) return { ...base, ok: false, modelRejected: true, output: r.stdout.trim().slice(0, 800), stderr: r.stderr.trim().slice(-1200), ms: Date.now() - t0, exitCode: r.code, usage: r.usage };
     }
-    return { ...base, ok: good, output: r.stdout.trim().slice(0, 800), stderr: r.stderr.trim().slice(-1200), ms: Date.now() - t0, exitCode: r.code };
+    return { ...base, ok: good, usage: r.usage, output: r.stdout.trim().slice(0, 800), stderr: r.stderr.trim().slice(-1200), ms: Date.now() - t0, exitCode: r.code };
   } catch (e) {
     return { ...base, ok: false, output: (e as Error).message, stderr: "", ms: Date.now() - t0, exitCode: null };
   }
