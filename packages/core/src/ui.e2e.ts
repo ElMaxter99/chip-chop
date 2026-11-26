@@ -19,10 +19,15 @@ test("local app: compare from the UI, see the report list, open the update tab",
     if (process.env.CHIPCHOP_SHOTS) await page.screenshot({ path: `${process.env.CHIPCHOP_SHOTS}/proyecto.png` });
 
     await page.getByRole("button", { name: "Comparar", exact: true }).first().click();
-    await page.locator("#base").selectOption("develop");
-    await page.locator("#head").selectOption("restyle");
+    for (const [id, ref] of [["base", "develop"], ["head", "restyle"]] as const) {
+      await page.locator(`[data-for="${id}"] .md-trigger`).click();
+      await page.locator(`[data-for="${id}"] .md-search`).fill(ref);
+      await page.keyboard.press("Enter");
+      assert.equal(await page.locator(`#${id}`).inputValue(), ref);
+    }
     await page.locator("#cmp").click();
     await page.locator(".chip").first().waitFor({ timeout: 240000 });
+    await page.locator(".runmodal [data-m=x]").click(); // el modal de progreso se abre solo al empezar
     const text = await page.locator("#result").innerText();
     assert.match(text, /Solo visual/);
     assert.match(text, /Pasa\./);
