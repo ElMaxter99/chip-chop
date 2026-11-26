@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [v0.4.7](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.7) - 2026-11-26
+### Added
+- **Pantalla de arranque con el logo animado:** la ventana aparece al instante y muestra qué está haciendo (preparando el entorno, cargando el motor, comprobando git, navegador y herramientas de IA) y, si tarda, avisa de que no se ha colgado. Además el arranque es más rápido: el PATH del usuario ya no bloquea la ventana y las comprobaciones se hacen a la vez. Los tiempos de cada fase salen en la consola (`[arranque]`).
+
+### Fixed
+- **Lista de modelos de Copilot completa:** si `copilot help` no la da entera, se muestran los modelos habituales (Claude, GPT, Gemini…) en lugar de solo «Auto»; la lectura de `copilot help` entiende más formatos (varias líneas, sin comillas).
+
 ## [v0.4.6](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.6) - 2026-11-26
 ### Fixed
 - **Actualizar en Linux (.deb/.rpm) sin salir de la app:** ahora se abre una ventana con el progreso (descargando, permisos, instalando, reiniciando), pide la contraseña de administrador con la ventana del sistema (polkit) y explica qué pasó si la cancelas o falla, con botón de reintentar. Al terminar chip-chop se cierra y se abre sola; ya no hay que cerrarla a mano. En Windows y AppImage se usa la misma ventana.
