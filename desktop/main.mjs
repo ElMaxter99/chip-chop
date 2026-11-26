@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { RELEASES_URL, feedForVersion, updateMode } from "./update-logic.mjs";
+import { installLinuxPackage, linuxPackageKind } from "./pkg-update.mjs";
 
 const { autoUpdater } = electronUpdater;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -241,11 +242,28 @@ async function installUpdate(log) {
     log(`ya estás al día (${info.current}, canal ${info.channel})`);
     return info;
   }
-  const mode = updateMode({ platform: process.platform, appImage: Boolean(process.env.APPIMAGE) });
+  const pkgKind = process.platform === "linux" && !process.env.APPIMAGE ? linuxPackageKind() : null;
+  const mode = updateMode({ platform: process.platform, appImage: Boolean(process.env.APPIMAGE), packageKind: pkgKind });
+  if (app.isPackaged && mode === "package") {
+    // .deb/.rpm: descarga, pide la contraseña de administrador (polkit), instala y reabre la app sola.
+    try {
+      await installLinuxPackage({ version: info.latest, kind: pkgKind, log });
+    } catch (e) {
+      if (e.code === "NO_ASSET") {
+        log("este paquete no tiene instalador automático: se abre la página de descargas");
+        await shell.openExternal(info.url || RELEASES_URL);
+        return { ...info, manual: true };
+      }
+      throw e;
+    }
+    log("descargada e instalada; reiniciando chip-chop");
+    setTimeout(() => { app.relaunch(); app.exit(0); }, 1500);
+    return { ...info, restart: true };
+  }
   if (!app.isPackaged || mode === "manual") {
     log(`hay una versión nueva (${info.latest}): se abre la página de descargas para instalarla a mano`);
     await shell.openExternal(info.url || RELEASES_URL);
-    return info;
+    return { ...info, manual: true };
   }
   const feed = feedForVersion(info.latest);
   autoUpdater.autoDownload = false;
@@ -260,7 +278,7 @@ async function installUpdate(log) {
   await autoUpdater.downloadUpdate();
   log("descargada; la app se reinicia para instalar");
   setTimeout(() => autoUpdater.quitAndInstall(false, true), 800);
-  return info;
+  return { ...info, restart: true };
 }
 
 // ───────── Pantalla de Inicio: lo que pide la interfaz ─────────
@@ -336,9 +354,10 @@ async function homeState(refreshAi = false) {
     version: app.getVersion(),
     platform: `${process.platform} ${process.arch}`,
     channel: core.getChannel(),
-    updateMode: updateMode({ platform: process.platform, appImage: Boolean(process.env.APPIMAGE) }),
+    updateMode: updateMode({ platform: process.platform, appImage: Boolean(process.env.APPIMAGE), packageKind: process.platform === "linux" && !process.env.APPIMAGE ? linuxPackageKind() : null }),
     cssHref: pathToFileURL(path.join(coreDir, "ui", "style.css")).href,
     aiEditorHref: pathToFileURL(path.join(coreDir, "ui", "ai-editor.js")).href,
+    updateModalHref: pathToFileURL(path.join(coreDir, "ui", "update-modal.js")).href,
     logoHref: pathToFileURL(path.join(here, "build", "icon.png")).href,
     chromium: { installed: chromiumInstalled() },
     projects: projects().map((p) => ({ path: p.path, name: path.basename(p.path), lastOpened: p.lastOpened || 0, exists: existsSync(p.path), initialized: existsSync(path.join(p.path, ".chipchop")), framework: guessFramework(p.path), lastReport: lastReport(p.path) })),

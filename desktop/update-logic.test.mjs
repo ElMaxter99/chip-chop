@@ -6,6 +6,8 @@ test("updateMode: auto en Windows y AppImage, manual en el resto", () => {
   assert.equal(updateMode({ platform: "win32" }), "auto");
   assert.equal(updateMode({ platform: "linux", appImage: true }), "auto");
   assert.equal(updateMode({ platform: "linux" }), "manual");
+  assert.equal(updateMode({ platform: "linux", packageKind: "deb" }), "package");
+  assert.equal(updateMode({ platform: "linux", appImage: true, packageKind: "deb" }), "auto");
   assert.equal(updateMode({ platform: "darwin" }), "manual");
 });
 

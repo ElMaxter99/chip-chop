@@ -97,7 +97,7 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
       const cookieOk = (req.headers.cookie ?? "").split(/;\s*/).includes(`cc=${token}`);
       const authed = u.searchParams.get("token") === token || req.headers["x-chipchop-token"] === token || cookieOk;
 
-      if (req.method === "GET" && (u.pathname === "/" || /^\/(app\.js|ai-editor\.js|icons\/[\w.-]+|style\.css|favicon\.svg|index\.html|fonts\/[\w.-]+)$/.test(u.pathname))) {
+      if (req.method === "GET" && (u.pathname === "/" || /^\/(app\.js|ai-editor\.js|update-modal\.js|icons\/[\w.-]+|style\.css|favicon\.svg|index\.html|fonts\/[\w.-]+)$/.test(u.pathname))) {
         const rel = u.pathname === "/" ? "index.html" : u.pathname.slice(1);
         const f = resolve(uiDir, rel);
         if (!f.startsWith(uiDir + sep) || !exists(f)) return void send(res, 404, { error: "not found" });

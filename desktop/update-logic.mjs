@@ -4,11 +4,12 @@ export const RELEASES_URL = "https://github.com/ElMaxter99/chip-chop/releases";
 
 /**
  * «auto»: la app descarga e instala sola (Windows NSIS y Linux AppImage).
- * «manual»: el botón abre la página de descargas (macOS sin firmar; Linux .deb/.rpm, que piden permisos de administrador).
+ * «package»: Linux instalado con .deb/.rpm: la app descarga el paquete, pide la contraseña de administrador (polkit) y se reinicia.
+ * «manual»: el botón abre la página de descargas (macOS sin firmar, o Linux sin un paquete reconocible).
  */
-export function updateMode({ platform, appImage = false }) {
+export function updateMode({ platform, appImage = false, packageKind = null }) {
   if (platform === "win32") return "auto";
-  if (platform === "linux") return appImage ? "auto" : "manual";
+  if (platform === "linux") return appImage ? "auto" : packageKind ? "package" : "manual";
   return "manual";
 }
 

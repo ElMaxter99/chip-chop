@@ -53,36 +53,6 @@
     return m;
   }
   function notify(e, title) { return dialog({ kind: "er", title: title || "No se ha podido completar", message: friendly(e && e.message ? e.message : e) }); }
-  // Panel de progreso de la actualización: fases, barra, tiempo y detalle plegado. push(línea) la hace avanzar.
-  var PHASES = ["Buscar", "Descargar", "Instalar", "Reiniciar"];
-  function progress(host, modeManual) {
-    var t0 = Date.now(), phase = 0, pct = null, ended = false, log = "";
-    host.innerHTML = '<div class="prog" role="status" aria-live="polite"><div class="prog-head"><b data-r="t">Preparando…</b><span class="mut small" data-r="s">0 s</span></div><div class="bar ind" data-r="b"><i data-r="i"></i></div><ol class="phases">' + PHASES.map(function (p) { return "<li>" + p + "</li>"; }).join("") + '</ol><details><summary>Ver detalles</summary><pre class="log" data-r="l"></pre></details></div>';
-    var q = function (k) { return host.querySelector('[data-r="' + k + '"]'); };
-    var timer = setInterval(function () { q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 500);
-    function paint(title) {
-      q("t").textContent = title;
-      host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = i < phase ? "done" : i === phase ? "on" : ""; });
-      q("b").className = "bar" + (pct == null ? " ind" : ""); q("i").style.width = pct == null ? "" : pct + "%";
-    }
-    paint("Buscando la versión…"); phase = 0; paint("Buscando la versión…");
-    return {
-      push: function (line) {
-        if (ended) return; log += line + "\n"; q("l").textContent = log;
-        var m;
-        if ((m = /progreso:\s*(\d+)%/.exec(line))) { phase = 1; pct = +m[1]; paint("Descargando… " + pct + "%"); }
-        else if (/^(downloading|descargando)/i.test(line)) { phase = 1; pct = null; paint("Descargando la nueva versión…"); }
-        else if (/^installing/i.test(line)) { phase = 2; pct = null; paint("Instalando sobre la versión actual…"); }
-        else if (/descargada/i.test(line)) { phase = 3; pct = null; paint("Reiniciando para terminar…"); }
-      },
-      end: function (ok, msg) {
-        ended = true; clearInterval(timer); phase = ok ? PHASES.length : phase; pct = ok ? 100 : 0;
-        host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = ok ? "done" : i < phase ? "done" : ""; });
-        q("b").className = "bar"; q("i").style.width = (ok ? 100 : 0) + "%"; q("t").textContent = msg; host.firstChild.classList.toggle("er", !ok);
-        q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s";
-      }
-    };
-  }
   function busy(btn, fn) {
     btn.disabled = true;
     var done = function () { btn.disabled = false; };
@@ -274,20 +244,15 @@
       checkUpdate().then(function (u) {
         var rd = el.querySelector('input[value="' + (u.channel || "stable") + '"]'); if (rd) rd.checked = true;
         var info = u.error ? '<div class="banner er"><strong>No se pudo comprobar.</strong><span class="grow">' + esc(u.error) + "</span></div>" :
-          u.available ? '<div class="small mut">Al actualizar se descarga el paquete de tu sistema y se instala encima. Después hay que reiniciar chip-chop.' + (u.note ? " <b>" + esc(u.note) + "</b>" : "") + ' <a href="' + esc(u.url) + '" target="_blank" rel="noopener">Ver cambios en GitHub</a></div>' : '<div class="small mut">Estás al día.</div>';
+          u.available ? '<div class="small mut">Al actualizar se descarga el paquete de tu sistema y se instala encima. Después hay que reiniciar chip-chop (en la app de escritorio se reinicia sola).' + (u.note ? " <b>" + esc(u.note) + "</b>" : "") + ' <a href="' + esc(u.url) + '" target="_blank" rel="noopener">Ver cambios en GitHub</a></div>' : '<div class="small mut">Estás al día.</div>';
         $("upcard").innerHTML = '<div class="row"><div class="grow"><div class="small mut">Instalada</div><b style="font-size:24px">' + esc(u.current || project.version) + '</b></div><div class="grow"><div class="small mut">Disponible en tu canal</div><b style="font-size:24px">' + (u.latest ? esc(u.latest) + " " + (u.available ? badge(u.prerelease ? "Candidata" : "Versión final", u.prerelease ? "wa" : "ok") : badge("Al día", "ok")) : "—") + '</b></div><button class="btn" id="chk">Buscar ahora</button><button class="btn p" id="upd"' + (u.available && !u.note ? "" : " disabled") + '>Actualizar</button></div><div style="margin-top:16px">' + info + "</div>";
         $("chk").onclick = function () { busy(this, function () { return Promise.resolve(fill()); }); };
         $("upd").onclick = function () {
-          var btn = this, chk = $("chk"), host = $("upprog"), pg = progress(host);
-          btn.disabled = true; chk.disabled = true; btn.textContent = "Actualizando…";
-          job("/api/update/install", {}, null, pg.push).then(function (r) {
-            if (r.status === "done") {
-              pg.end(true, "Actualización instalada");
-              return dialog({ kind: "ok", title: "Actualización instalada", message: "Cierra chip-chop (Ctrl+C en la terminal) y ábrelo de nuevo para usar la nueva versión.", buttons: [{ label: "Entendido", primary: true, value: true }] });
-            }
-            pg.end(false, "La actualización ha fallado"); btn.disabled = false; chk.disabled = false; btn.textContent = "Actualizar";
-            return dialog({ kind: "er", title: "La actualización ha fallado", message: "No se ha podido instalar la nueva versión. La que tenías sigue funcionando.", detail: "Abre «Ver detalles» en el panel de progreso para ver el motivo." });
-          }, function (e) { pg.end(false, "La actualización ha fallado"); btn.disabled = false; chk.disabled = false; btn.textContent = "Actualizar"; return notify(e, "No se ha podido actualizar"); });
+          var btn = this, chk = $("chk");
+          btn.disabled = true; chk.disabled = true;
+          window.ChipUpdate.run(function (push) {
+            return job("/api/update/install", {}, null, push).then(function (r) { if (r.status === "done") return r.result; throw new Error(""); });
+          }).then(function () { btn.disabled = false; chk.disabled = false; return fill(); });
         };
       });
     }

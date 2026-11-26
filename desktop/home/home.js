@@ -7,7 +7,7 @@
   var STAGES = [["discover", "Descubrir", "Rutas y modales → estados"], ["flows", "Flujos", "Recorridos del usuario"], ["mocks", "Mocks", "Respuestas del backend con tipos"], ["repair", "Reparar", "Corrige errores de validación"]];
   var TR = [["needs >= 22", "hace falta 22 o superior"], ["not found on PATH (only needed if a stage uses it)", "no encontrado (solo hace falta si una etapa lo usa)"], ["not found on PATH", "no encontrado"], ["not installed. Run: npx playwright install chromium", "no instalado"]];
   var tr = function (s) { TR.forEach(function (p) { s = s.replace(p[0], p[1]); }); return s; };
-  var updPg = null, S = null, tab = "proyectos", chromiumLog = "", updLog = "", updInfo = null, installingChromium = false, chromiumFailed = false, autoTried = false, msgs = {};
+  var updPush = null, S = null, tab = "proyectos", chromiumLog = "", updLog = "", updInfo = null, installingChromium = false, chromiumFailed = false, autoTried = false, msgs = {};
 
   // ---------- diálogos y progreso (comunes) ----------
   function dialog(o) {
@@ -36,44 +36,15 @@
     return m;
   }
   function notify(e, title) { return dialog({ kind: "er", title: title || "No se ha podido completar", message: friendly(e && e.message ? e.message : e) }); }
-  // Panel de progreso de la actualización: fases, barra, tiempo y detalle plegado. push(línea) la hace avanzar.
-  var PHASES = ["Buscar", "Descargar", "Instalar", "Reiniciar"];
-  function progress(host, modeManual) {
-    var t0 = Date.now(), phase = 0, pct = null, ended = false, log = "";
-    host.innerHTML = '<div class="prog" role="status" aria-live="polite"><div class="prog-head"><b data-r="t">Preparando…</b><span class="mut small" data-r="s">0 s</span></div><div class="bar ind" data-r="b"><i data-r="i"></i></div><ol class="phases">' + PHASES.map(function (p) { return "<li>" + p + "</li>"; }).join("") + '</ol><details><summary>Ver detalles</summary><pre class="log" data-r="l"></pre></details></div>';
-    var q = function (k) { return host.querySelector('[data-r="' + k + '"]'); };
-    var timer = setInterval(function () { q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 500);
-    function paint(title) {
-      q("t").textContent = title;
-      host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = i < phase ? "done" : i === phase ? "on" : ""; });
-      q("b").className = "bar" + (pct == null ? " ind" : ""); q("i").style.width = pct == null ? "" : pct + "%";
-    }
-    paint("Buscando la versión…"); phase = 0; paint("Buscando la versión…");
-    return {
-      push: function (line) {
-        if (ended) return; log += line + "\n"; q("l").textContent = log;
-        var m;
-        if ((m = /progreso:\s*(\d+)%/.exec(line))) { phase = 1; pct = +m[1]; paint("Descargando… " + pct + "%"); }
-        else if (/^(downloading|descargando)/i.test(line)) { phase = 1; pct = null; paint("Descargando la nueva versión…"); }
-        else if (/^installing/i.test(line)) { phase = 2; pct = null; paint("Instalando sobre la versión actual…"); }
-        else if (/descargada/i.test(line)) { phase = 3; pct = null; paint("Reiniciando para terminar…"); }
-      },
-      end: function (ok, msg) {
-        ended = true; clearInterval(timer); phase = ok ? PHASES.length : phase; pct = ok ? 100 : 0;
-        host.querySelectorAll(".phases li").forEach(function (li, i) { li.className = ok ? "done" : i < phase ? "done" : ""; });
-        q("b").className = "bar"; q("i").style.width = (ok ? 100 : 0) + "%"; q("t").textContent = msg; host.firstChild.classList.toggle("er", !ok);
-        q("s").textContent = Math.round((Date.now() - t0) / 1000) + " s";
-      }
-    };
-  }
   function fail(e) { return notify(e); }
   function ago(ts) { if (!ts) return "nunca"; var m = Math.round((Date.now() - ts) / 60000); if (m < 1) return "ahora mismo"; if (m < 60) return "hace " + m + " min"; var h = Math.round(m / 60); if (h < 24) return "hace " + h + " h"; return "hace " + Math.round(h / 24) + " d"; }
 
   api.onLog(function (line) {
     if (line.indexOf("chromium:") === 0) { chromiumLog = line.slice(9); var el = $("chromiumLog"); if (el) el.textContent = chromiumLog; }
-    else if (updPg) updPg.push(line);
+    else if (updPush) updPush(line);
   });
 
+  function loadScript(href) { return window.ChipUpdate || !href ? Promise.resolve() : new Promise(function (ok) { var s = document.createElement("script"); s.src = href; s.onload = s.onerror = function () { ok(); }; document.head.appendChild(s); }); }
   function loadEditor(href) { return window.ChipAi || !href ? Promise.resolve() : new Promise(function (ok) { var s = document.createElement("script"); s.src = href; s.onload = s.onerror = function () { ok(); }; document.head.appendChild(s); }); }
   function load() { return api.invoke("home:state").then(function (s) { return loadEditor(s.aiEditorHref).then(function () { return s; }); }).then(function (s) { S = s; if (!document.getElementById("css")) { var l = document.createElement("link"); l.id = "css"; l.rel = "stylesheet"; l.href = s.cssHref; l.onload = function () { document.body.style.visibility = "visible"; }; document.head.appendChild(l); } render(); }); }
 
@@ -213,25 +184,22 @@
   // ---------- ajustes ----------
   function renderSettings() {
     var info = updInfo;
-    var upd = info ? (info.error ? '<div class="banner er">No se pudo consultar: ' + esc(info.error) + "</div>" : info.available ? '<div class="banner"><div class="grow"><b>Hay una versión nueva: ' + esc(info.latest) + "</b>" + (info.prerelease ? " " + badge("candidata", "wa") : "") + '<div class="small">' + (S.updateMode === "auto" ? "Se descarga e instala sola y la app se reinicia." : "En este sistema se abre la página de descargas para instalarla a mano.") + '</div></div><button class="btn p" id="doUpd">' + (S.updateMode === "auto" ? "Actualizar ahora" : "Abrir descargas") + "</button></div>" : '<div class="banner">Estás al día (' + esc(info.current) + ").</div>") : "";
+    var upd = info ? (info.error ? '<div class="banner er">No se pudo consultar: ' + esc(info.error) + "</div>" : info.available ? '<div class="banner"><div class="grow"><b>Hay una versión nueva: ' + esc(info.latest) + "</b>" + (info.prerelease ? " " + badge("candidata", "wa") : "") + '<div class="small">' + (S.updateMode !== "manual" ? (S.updateMode === "package" ? "Se descarga, te pide la contraseña de administrador para instalarla y la app se reinicia sola." : "Se descarga e instala sola y la app se reinicia.") : "En este sistema se abre la página de descargas para instalarla a mano.") + '</div></div><button class="btn p" id="doUpd">' + (S.updateMode !== "manual" ? "Actualizar ahora" : "Abrir descargas") + "</button></div>" : '<div class="banner">Estás al día (' + esc(info.current) + ").</div>") : "";
     $("ajustes").innerHTML = '<div><h1>Ajustes</h1><p class="sub">Versión, actualizaciones y estado del sistema.</p></div>' + warnings() +
       '<div class="card"><h2>Actualizaciones</h2><div class="kv"><span>Versión instalada</span><b>' + esc(S.version) + "</b></div>" +
       '<div role="radiogroup" aria-label="Canal de actualizaciones"><label class="radio"><input type="radio" name="canal" value="stable"' + (S.channel === "stable" ? " checked" : "") + '><span><b>Solo estables</b><br><span class="mut small">Solo versiones finales. Ignora las candidatas (rc).</span></span></label>' +
       '<label class="radio"><input type="radio" name="canal" value="latest"' + (S.channel === "latest" ? " checked" : "") + '><span><b>Últimas</b><br><span class="mut small">Siempre la más reciente, sea candidata (rc) o final.</span></span></label></div>' +
-      '<div class="row" style="margin:12px 0"><button class="btn" id="chk">Buscar actualizaciones</button></div>' + upd + '<div id="updProg"></div></div>' +
+      '<div class="row" style="margin:12px 0"><button class="btn" id="chk">Buscar actualizaciones</button></div>' + upd + '</div>' +
       '<div class="card"><h2>Estado del sistema</h2>' + S.checks.filter(function (c) { return c.name.indexOf("ai:") !== 0; }).map(function (c) { return '<div class="kv"><span>' + esc(c.name) + "</span><span>" + badge(c.ok ? "ok" : "falta", c.ok ? "ok" : "er") + ' <span class="small mut">' + esc(tr(c.detail)) + "</span></span></div>"; }).join("") + '<div class="kv"><span>Sistema</span><span class="mut">' + esc(S.platform) + "</span></div></div>" +
       '<div class="card"><h2>Acerca de</h2><p style="margin:0">Chip Chop captura cada estado de la interfaz de una app web en dos versiones de git y compara píxeles, árbol ARIA, peticiones, errores de consola y el grafo de flujos. <a href="#" id="docs">Documentación y versiones</a></p></div>';
     document.querySelectorAll("input[name=canal]").forEach(function (r) { r.onchange = function () { api.invoke("home:setChannel", r.value).then(function () { S.channel = r.value; updInfo = null; }); }; });
     $("chk").onclick = function () { var b = $("chk"); b.disabled = true; b.textContent = "Buscando…"; api.invoke("home:checkUpdate").then(function (i) { updInfo = i; renderSettings(); }, function (e) { updInfo = { error: e.message }; renderSettings(); }); };
-    if (updPg && $("updProg")) $("updProg").replaceWith(updPg.host);
     if ($("doUpd")) $("doUpd").onclick = function () {
-      var b = $("doUpd"), manual = S.updateMode !== "auto", c = $("chk");
-      b.disabled = true; c.disabled = true; b.textContent = manual ? "Abriendo…" : "Actualizando…";
-      updPg = progress($("updProg"), manual); updPg.host = $("updProg");
-      api.invoke("home:installUpdate").then(function () {
-        if (manual) { updPg.end(true, "Se ha abierto la página de descargas"); b.disabled = false; c.disabled = false; b.textContent = "Abrir descargas"; }
-        else updPg.end(true, "Descargada: la app se reinicia para terminar");
-      }, function (e) { updPg.end(false, "La actualización ha fallado"); b.disabled = false; c.disabled = false; b.textContent = "Actualizar ahora"; return notify(e, "No se ha podido actualizar"); });
+      var b = $("doUpd"), c = $("chk");
+      b.disabled = true; c.disabled = true;
+      loadScript(S.updateModalHref).then(function () {
+        return window.ChipUpdate.run(function (push) { updPush = push; return api.invoke("home:installUpdate"); });
+      }).then(function () { updPush = null; b.disabled = false; c.disabled = false; }, function (e) { updPush = null; b.disabled = false; c.disabled = false; return notify(e, "No se ha podido actualizar"); });
     };
     $("docs").onclick = function (e) { e.preventDefault(); api.invoke("home:openExternal", "https://github.com/ElMaxter99/chip-chop"); };
   }

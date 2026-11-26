@@ -38,7 +38,7 @@ Descarga el instalable de tu sistema en la [última release](https://github.com/
 |---|---|---|
 | Windows | `chip-chop-*-win-x64.exe` | Instalador. SmartScreen avisará: no está firmado. |
 | macOS | `chip-chop-*-mac-arm64.dmg` / `-x64.dmg` | **Nunca probado en un Mac real.** Gatekeeper avisará: no está firmado. |
-| Linux | `.AppImage`, `.deb`, `.rpm` | El AppImage se actualiza solo; `.deb`/`.rpm` abren la página de descargas. |
+| Linux | `.AppImage`, `.deb`, `.rpm` | Se actualizan desde la app: el AppImage solo; `.deb`/`.rpm` te piden la contraseña de administrador y la app se reinicia sola. |
 | Terminal (sin ventana) | `chip-chop-*-linux.tar.gz`, `-windows.zip`, `-macos.tar.gz` | Trae `install.sh` / `install.ps1`; da el comando `chip-chop`. |
 
 Necesitas **git** y **Node 22 o superior** en el PATH para la línea de comandos. La app de escritorio ya trae lo que necesita y descarga Chromium la primera vez (se muestra el progreso en la pantalla de Inicio).
@@ -218,7 +218,7 @@ Pestañas de Inicio: **Proyectos**, **IA** (qué proveedor y modelo usa cada eta
 
 ## Actualizaciones y canales
 
-La app avisa cuando hay una versión nueva y la instala sola en Windows y en el AppImage de Linux; en macOS, `.deb` y `.rpm` abre la página de descargas. Por terminal: `chip-chop update --check` y `chip-chop update`.
+La app avisa cuando hay una versión nueva y la instala sola en Windows, en el AppImage y en los `.deb`/`.rpm` de Linux (en estos pide la contraseña de administrador con la ventana del sistema, necesita `pkexec`; si no hay, deja el paquete descargado y te dice el comando). Una ventana muestra el progreso y, al terminar, la app se reinicia sola; si cancelas la contraseña o falla algo, lo explica y puedes reintentar. En macOS abre la página de descargas. Por terminal: `chip-chop update --check` y `chip-chop update`.
 
 | Canal | Qué recibes |
 |---|---|
@@ -245,7 +245,7 @@ Cámbialo en **Ajustes** o con `chip-chop update channel latest`. Los borradores
 
 Probado en CI (Linux y Windows): motor, CLI, interfaz, demos de AngularJS y estática, actualizador contra releases simuladas y arranque del paquete de escritorio.
 
-**Sin probar** (no lo des por hecho): el proveedor de OpenAI Codex y la lectura de modelos de `copilot help` (solo con tests unitarios); la configuración inicial de la app de escritorio (solo con datos de ejemplo); macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
+**Sin probar** (no lo des por hecho): el proveedor de OpenAI Codex y la lectura de modelos de `copilot help` (solo con tests unitarios); la configuración inicial de la app de escritorio (solo con datos de ejemplo); macOS en un Mac real; instalar a mano el `.exe`, el `.dmg`, el `.deb`/`.rpm`/AppImage; la actualización del `.deb`/`.rpm` con la contraseña de administrador y el reinicio automático (solo con tests y el modal en un navegador); notificaciones, arrastrar y soltar y memoria de ventana más allá de arrancar; la IA con Claude CLI y Copilot CLI de extremo a extremo; apps reales de Angular y React. Los instalables **no están firmados**.
 
 ## Desarrollo y releases
 

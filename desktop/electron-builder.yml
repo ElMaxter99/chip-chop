@@ -10,6 +10,7 @@ asar: true
 files:
   - main.mjs
   - update-logic.mjs
+  - pkg-update.mjs
   - preload.cjs
   - home/**
   - build/icon.png
