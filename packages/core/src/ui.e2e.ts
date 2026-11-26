@@ -29,8 +29,16 @@ assert.ok(readFileSync(0, "utf8").includes('{"base":"develop","head":"restyle"}'
     await page.getByText("Comprobando").waitFor({ state: "detached", timeout: 30000 });
     if (process.env.CHIPCHOP_SHOTS) await page.screenshot({ path: `${process.env.CHIPCHOP_SHOTS}/proyecto.png` });
 
-    await page.locator("#project-base").fill("develop");
-    await page.locator("#project-head").fill("restyle");
+    for (const [id, query, ref] of [["project-base", "devel", "develop"], ["project-head", "resty", "restyle"]] as const) {
+      const combo = page.locator(`[data-for="${id}"]`);
+      await combo.locator(".md-trigger").click();
+      await combo.locator(".md-search").fill(query);
+      await combo.getByRole("option", { name: ref, exact: true }).waitFor();
+      assert.equal(await combo.getByRole("option", { name: "feature", exact: true }).count(), 0);
+      await combo.locator(".md-search").press("Enter");
+      assert.equal(await page.locator(`#${id}`).inputValue(), ref);
+      assert.equal(await combo.locator(".md-trigger").getAttribute("aria-expanded"), "false");
+    }
     await page.locator("#gen").click();
     await page.getByText("10 pares de capturas comparables").waitFor({ timeout: 120000 });
     await page.locator(".runmodal [data-m=x]").click();

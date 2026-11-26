@@ -100,12 +100,12 @@
   }
   function setBranch(side, ref) {
     branchPair[side] = ref;
-    var input = $("project-" + side), combo = $(side);
-    if (input) input.value = ref;
-    if (combo) {
-      combo.value = ref;
-      combo.parentNode.querySelector(".md-trigger span").textContent = ref || "Elige una rama";
-    }
+    [side, "project-" + side].forEach(function (id) {
+      var input = $(id);
+      if (!input) return;
+      input.value = ref;
+      input.parentNode.querySelector(".md-trigger span").textContent = ref || "Elige una rama";
+    });
     renderValidation();
   }
   function renderValidation() {
@@ -154,16 +154,10 @@
       : step(1, "Crear carpeta .chipchop", "Configuración, estados y guías para la IA.", badge("Pendiente"), '<label class="f">Framework<select id="fw"><option>angularjs</option><option>angular</option><option>react</option><option>other</option></select></label><button class="btn p" id="init">Crear</button>');
     var s2 = step(2, "Generar con IA", esc(disc) + " lee el código y escribe estados, flujos y mocks.", (aiBad.length ? badge("Revisar la IA", "wa") : p.hasCatalog ? (generated ? badge(k.states + " estados · " + k.mocks + " mocks", "ok") : badge("Pendiente")) : badge("Falta el paso 1", "wa")), '<button class="btn p" id="gen"' + (p.hasCatalog ? "" : " disabled") + ">" + (generated ? "Volver a generar" : "Generar con IA") + "</button>");
     var s3 = step(3, "Validar capturas", "Compila las dos ramas y prueba los estados, flujos y mocks en el navegador.", '<span id="valst"></span>', '<button class="btn" id="val"' + (p.hasCatalog ? "" : " disabled") + ">Validar</button>");
-    var branchField = function (side, label) { return '<label class="f">' + label + '<input id="project-' + side + '" list="project-refs" value="' + esc(branchPair[side]) + '"></label>'; };
-    var refs = p.refs ? p.refs.branches.concat(p.refs.tags) : [];
     c.innerHTML = '<div><h1>Preparar la app</h1><p class="sub">Elige las ramas del informe, prepara el catálogo y comprueba sus capturas.</p></div>' +
-      '<div class="card"><h2>Ramas del informe</h2><div class="row">' + branchField("base", "Rama base") + branchField("head", "Rama a comparar") + '</div><datalist id="project-refs">' +
-      refs.map(function (ref) { return '<option value="' + esc(ref) + '"></option>'; }).join("") + '</datalist></div>' + s1 + s2 + s3 +
+      '<div class="card"><h2>Ramas del informe</h2><div class="row">' + branchCombo("project-base", "base", "Rama base") + branchCombo("project-head", "head", "Rama a comparar") + '</div></div>' + s1 + s2 + s3 +
       '<div id="genRun" hidden></div><div id="validation-run" hidden></div><div id="validation-result" hidden></div><div class="card"><h2>Entorno</h2><div id="env" class="mut">Comprobando…</div></div>';
-    ["base", "head"].forEach(function (side) {
-      var input = $("project-" + side);
-      input.onchange = function () { setBranch(side, input.value.trim()); };
-    });
+    bindBranchCombos(c);
     renderValidation();
     if ($("init")) $("init").onclick = function () { api("/api/init", "POST", { framework: $("fw").value }).then(load); };
     $("gen").onclick = function () {
@@ -271,7 +265,7 @@
     var inp = root.querySelector("input[type=hidden]"), tr = root.querySelector(".md-trigger"), menu = root.querySelector(".md-menu"), q = root.querySelector(".md-search"), ul = root.querySelector(".md-list"), foot = root.querySelector(".md-foot"), act = 0, shown = [];
     function label() { tr.firstChild.textContent = inp.value || "Elige una rama"; }
     function close() { menu.hidden = true; tr.setAttribute("aria-expanded", "false"); }
-    function pick(v) { setBranch(inp.id, v); label(); close(); tr.focus(); }
+    function pick(v) { setBranch(root.dataset.side, v); close(); tr.focus(); }
     function draw() {
       var t = q.value.trim().toLowerCase();
       shown = refs.filter(function (r) { return !t || r.toLowerCase().indexOf(t) >= 0; });
@@ -294,18 +288,31 @@
       else if (e.key === "Escape") { e.preventDefault(); close(); tr.focus(); }
     };
     ul.onmousedown = function (e) { var li = e.target.closest("li.md-it"); if (!li) return; e.preventDefault(); pick(li.getAttribute("data-c") ? q.value.trim() : shown[+li.getAttribute("data-i")]); };
-    document.addEventListener("click", function (e) { if (!root.contains(e.target)) close(); });
     label();
   }
+  function branchCombo(id, side, label) {
+    return '<div class="f"><span>' + label + '</span><div class="mdsel combo" data-side="' + side + '" data-for="' + id + '"><input type="hidden" id="' + id + '" value="' + esc(branchPair[side]) + '"><button type="button" class="md-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + '"><span></span><span aria-hidden="true">▾</span></button><div class="md-menu" hidden><input type="text" class="md-search" placeholder="Buscar rama o etiqueta…" aria-label="Buscar ' + label.toLowerCase() + '" autocomplete="off" spellcheck="false"><ul class="md-list" role="listbox"></ul><div class="md-foot small mut"></div></div></div></div>';
+  }
+  function bindBranchCombos(panel) {
+    var refs = project.refs ? project.refs.branches.concat(project.refs.tags) : [];
+    panel.querySelectorAll(".combo").forEach(function (c) { refCombo(c, refs); });
+  }
+  document.addEventListener("click", function (e) {
+    document.querySelectorAll(".combo .md-menu:not([hidden])").forEach(function (menu) {
+      var root = menu.parentNode;
+      if (!root.contains(e.target)) {
+        menu.hidden = true;
+        root.querySelector(".md-trigger").setAttribute("aria-expanded", "false");
+      }
+    });
+  });
   function renderCompare() {
-    var refs = (project.refs ? project.refs.branches.concat(project.refs.tags) : []);
-    var combo = function (id, label) { return '<div class="f"><span>' + label + '</span><div class="mdsel combo" data-for="' + id + '"><input type="hidden" id="' + id + '" value="' + esc(branchPair[id]) + '"><button type="button" class="md-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + '"><span></span><span aria-hidden="true">▾</span></button><div class="md-menu" hidden><input type="text" class="md-search" placeholder="Buscar rama o etiqueta…" aria-label="Buscar ' + label.toLowerCase() + '" autocomplete="off" spellcheck="false"><ul class="md-list" role="listbox"></ul><div class="md-foot small mut"></div></div></div></div>'; };
     $("comparar").innerHTML = '<div><h1>Comparar dos ramas</h1><p class="sub">Se compila cada rama aparte; tu carpeta de trabajo no se toca.</p></div>' +
-      '<div class="card"><div class="row" style="align-items:flex-end">' + combo("base", "Base") + combo("head", "Cabeza") + '' +
+      '<div class="card"><div class="row" style="align-items:flex-end">' + branchCombo("base", "base", "Base") + branchCombo("head", "head", "Cabeza") + '' +
       '<div class="f"><span>Modo</span><div class="seg" role="radiogroup" aria-label="Modo"><label><input type="radio" name="mode" value="restyle" checked><span>Restyle</span></label><label><input type="radio" name="mode" value="flow-audit"><span>Auditar flujos</span></label></div></div><span class="grow"></span><button class="btn p" id="cmp">Comparar</button></div>' +
       '<p class="small mut" style="margin:12px 0 0">Restyle: solo pueden cambiar los píxeles. Auditar flujos: se esperan pantallas nuevas.</p><div id="compare-validation" style="margin-top:8px"></div></div>' +
       '<div id="cmpRun" hidden></div><div id="result"></div>';
-    document.querySelectorAll("#comparar .combo").forEach(function (c) { refCombo(c, refs); });
+    bindBranchCombos($("comparar"));
     renderValidation();
     if (!project.hasCatalog) $("result").innerHTML = '<div class="banner wa"><strong>Primero prepara la app</strong><span class="grow">Falta la carpeta .chipchop (pestaña Proyecto).</span></div>';
     $("cmp").onclick = function () {
