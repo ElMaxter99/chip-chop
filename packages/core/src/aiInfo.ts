@@ -36,18 +36,30 @@ const CLAUDE_MODELS: ModelOption[] = [
 /** Modelos que Copilot CLI suele ofrecer (según la documentación de GitHub); sirve de respaldo si `copilot help` no los lista. */
 const COPILOT_MODELS: ModelOption[] = [
   { value: "auto", label: "Auto", hint: "Copilot elige según disponibilidad" },
-  { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
   { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
   { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", hint: "rápido" },
-  { value: "claude-opus-4.6", label: "Claude Opus 4.6", hint: "el más capaz" },
+  { value: "gpt-5-mini", label: "GPT-5 mini", hint: "incluido en el plan" },
+  { value: "gpt-4.1", label: "GPT-4.1", hint: "incluido en el plan" },
+  { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6", hint: "no está en todos los planes" },
+  { value: "claude-opus-4.6", label: "Claude Opus 4.6", hint: "el más capaz; no está en todos los planes" },
   { value: "gpt-5.4", label: "GPT-5.4" },
   { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
   { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
   { value: "gpt-5.2", label: "GPT-5.2" },
-  { value: "gpt-5-mini", label: "GPT-5 mini", hint: "incluido en el plan" },
-  { value: "gpt-4.1", label: "GPT-4.1", hint: "incluido en el plan" },
   { value: "gemini-3-pro-preview", label: "Gemini 3 Pro (preview)" },
 ];
+
+/** `copilot help config` describe el ajuste `model` con sus valores entre comillas: de ahí salen los modelos reales de esa versión. */
+export function parseCopilotConfigModels(text: string): string[] {
+  const m = /(^|\n)[ \t]*[`"']?model[`"']?[ \t]*(:|\n)/i.exec(text);
+  if (!m) return [];
+  const rest = text.slice(m.index + m[0].length);
+  const end = rest.search(/\n[ \t]{0,4}[`"']?[a-z_]+[`"']?[ \t]*:[ \t]*\n|\n[ \t]{0,4}`[a-z_]+`/i);
+  const block = end < 0 ? rest.slice(0, 4000) : rest.slice(0, end);
+  const out: string[] = [];
+  for (const q of block.matchAll(/["'`]([A-Za-z0-9][\w.:/-]*)["'`]/g)) if (!out.includes(q[1]!) && /[-.\d]/.test(q[1]!)) out.push(q[1]!);
+  return out;
+}
 
 const ID = /^[A-Za-z0-9][\w.:/-]*$/;
 
@@ -68,11 +80,12 @@ export function parseCopilotModels(help: string): string[] {
   return out;
 }
 
-function helpText(path: string): Promise<string> {
+function helpText(path: string, topic?: string): Promise<string> {
+  const args = topic ? ["help", topic] : ["help"];
   return new Promise((resolve) => {
     const cb = (_e: Error | null, stdout: string | Buffer): void => resolve(stdout.toString());
-    if (needsShell(path)) execFile(quoteForCmd(path), ["help"], { timeout: 20000, shell: true, windowsHide: true }, cb);
-    else execFile(path, ["help"], { timeout: 20000, windowsHide: true }, cb);
+    if (needsShell(path)) execFile(quoteForCmd(path), args, { timeout: 20000, shell: true, windowsHide: true }, cb);
+    else execFile(path, args, { timeout: 20000, windowsHide: true }, cb);
   });
 }
 
@@ -92,7 +105,7 @@ export async function aiInfo(cfg: ReturnType<typeof loadAiConfig>, force = false
       let models: ModelList = { options: [], source: "builtin", note: "Escribe el nombre del modelo que acepte tu herramienta." };
       if (p.type === "claude") models = { options: CLAUDE_MODELS, source: "builtin", note: "Lista incluida con chip-chop. Si tu Claude Code tiene otro modelo, elige «Otro…» y escribe su nombre." };
       if (p.type === "copilot") {
-        const names = found ? parseCopilotModels(await helpText(found.path)) : [];
+        const names = found ? [...new Set([...parseCopilotModels(await helpText(found.path)), ...parseCopilotConfigModels(await helpText(found.path, "config"))])] : [];
         if (names.length >= 4) models = { options: names.map((n) => ({ value: n, label: COPILOT_MODELS.find((m) => m.value === n)?.label ?? n, ...(COPILOT_MODELS.find((m) => m.value === n)?.hint ? { hint: COPILOT_MODELS.find((m) => m.value === n)!.hint! } : {}) })), source: "cli", note: "Lista leída de «copilot help». Según tu plan puede que algún modelo no esté habilitado." };
         else {
           const extra = names.filter((n) => !COPILOT_MODELS.some((m) => m.value === n)).map((n) => ({ value: n, label: n }));

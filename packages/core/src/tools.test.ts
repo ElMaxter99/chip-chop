@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveCommand } from "./tools.js";
-import { parseCopilotModels } from "./aiInfo.js";
+import { parseCopilotModels, parseCopilotConfigModels } from "./aiInfo.js";
 
 test("resolveCommand encuentra un ejecutable por ruta explícita o en el PATH", async () => {
   const d = mkdtempSync(join(tmpdir(), "tools-"));
@@ -60,4 +60,22 @@ test("aiProblems: herramienta que falta y modelo que el CLI ya no lista (solo si
   const p = aiProblems(cfg as never, info);
   assert.deepEqual(p.map((x) => `${x.stage}:${x.reason}`), ["discover:model-unknown", "mocks:tool-missing"]);
   assert.deepEqual(aiProblems(cfg as never, info, ["flows"]), []);
+});
+
+test("parseCopilotConfigModels lee los modelos del ajuste «model» de `copilot help config`", () => {
+  const txt = [
+    "Configuration settings:",
+    "",
+    "  `editor`: command used to edit prompts",
+    "",
+    "  `model`: AI model to use for Copilot CLI; can be changed with /model.",
+    '    - "claude-sonnet-4.5"',
+    '    - "gpt-5-mini"',
+    '    - "gpt-4.1"',
+    '    - "claude-haiku-4.5"',
+    "",
+    "  `theme`: auto, dark or light",
+  ].join("\n");
+  assert.deepEqual(parseCopilotConfigModels(txt), ["claude-sonnet-4.5", "gpt-5-mini", "gpt-4.1", "claude-haiku-4.5"]);
+  assert.deepEqual(parseCopilotConfigModels("nada"), []);
 });
