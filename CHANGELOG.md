@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [v0.4.15](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.15) - 2026-11-26
+### Added
+- Proyecto permite elegir las dos ramas del informe antes de generar con IA. Tras la generación, valida el catálogo con capturas reales de ambas ramas y muestra imágenes de muestra, fallos y cuántos pares se pueden comparar.
+
 ## [v0.4.13](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.13) - 2026-11-26
 ### Changed
 - Cuando un flujo o estado falla al capturar, el mensaje ahora indica qué paso era, qué selector esperaba y en qué URL se quedó la página, en vez de solo «Timeout exceeded».
