@@ -18,6 +18,18 @@ import type { PreparedTarget } from "./runner.js";
 import type { CaptureResult, FlowStep, GraphEdge, Mock, RunInfo, State, Target, Viewport } from "./types.js";
 import { matchUrl } from "./urlMatch.js";
 
+/** Primera línea del error + el selector que esperaba (Playwright lo pone en «waiting for …») y la URL en la que se quedó. */
+function describeStepAt(flow: { steps: FlowStep[] }, index: number): string {
+  const st = flow.steps[index - 1];
+  return st ? ("capture" in st ? `capture ${st.capture}` : describeStep(st)) : "?";
+}
+function errorDetail(e: unknown, url?: string): string {
+  const msg = (e as Error).message ?? String(e);
+  const first = msg.split("\n")[0] ?? "failed";
+  const waiting = /waiting for (.+)/.exec(msg)?.[1]?.trim();
+  return first + (waiting && !first.includes(waiting) ? ` · esperando ${waiting}` : "") + (url ? ` · URL: ${url}` : "");
+}
+
 export interface CaptureOptions {
   target: PreparedTarget;
   outDir: string;
@@ -379,7 +391,7 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
               }
             }
           } catch (e) {
-            const message = `flow "${flow.id}" failed at step ${index}: ${(e as Error).message.split("\n")[0]}`;
+            const message = `flow "${flow.id}" failed at step ${index} (${describeStepAt(flow, index)}): ${errorDetail(e, session.page.url())}`;
             log(`  ${message}`);
             flow.steps.slice(index - 1).forEach((st) => {
               if ("capture" in st) fail(st.capture, vp.name, message);
@@ -419,7 +431,7 @@ export async function capture(opts: CaptureOptions): Promise<RunInfo> {
           }
           await takeCapture(session, state);
         } catch (e) {
-          const message = (e as Error).message.split("\n")[0] ?? "failed";
+          const message = errorDetail(e, session.page.url());
           log(`  failed: ${message}`);
           fail(state.id, vp.name, message);
         } finally {
