@@ -1,4 +1,4 @@
 ---
 type: Fixed
 ---
-**Modelos de Copilot más fiables:** además de `copilot help`, se lee `copilot help config` (donde la CLI lista los modelos de su versión) y la lista de respaldo pone primero los que están en todos los planes (Sonnet 4.5, Haiku 4.5, GPT-5 mini, GPT-4.1) en lugar de Sonnet 4.6, que no todos los planes tienen.
+**Las listas de modelos ya no van escritas a mano:** salen siempre de la herramienta. Copilot: de `copilot help` y `copilot help config`; Claude: de los alias que documenta `claude --help` y, con `ANTHROPIC_API_KEY`, de la API de Anthropic (`/v1/models`); Codex no publica lista. Si no se puede leer, solo se ofrece «Predeterminado» y «Otro…» con un aviso que lo explica, en vez de una lista que se queda atrás y falla (p. ej. un modelo que tu plan no tiene). Los modelos de la configuración básica solo se proponen si están en la lista real.

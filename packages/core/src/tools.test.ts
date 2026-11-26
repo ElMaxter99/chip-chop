@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveCommand } from "./tools.js";
-import { parseCopilotModels, parseCopilotConfigModels } from "./aiInfo.js";
+import { parseCopilotModels, parseCopilotConfigModels, parseModelAliases } from "./aiInfo.js";
 
 test("resolveCommand encuentra un ejecutable por ruta explícita o en el PATH", async () => {
   const d = mkdtempSync(join(tmpdir(), "tools-"));
@@ -55,8 +55,8 @@ import { aiProblems, type ProviderInfo } from "./aiInfo.js";
 
 test("aiProblems: herramienta que falta y modelo que el CLI ya no lista (solo si la lista viene del CLI)", () => {
   const cfg = { providers: {}, stages: { discover: { provider: "copilot", model: "viejo" }, flows: { provider: "claude", model: "sonnet" }, mocks: { provider: "codex", model: "x" } }, settings: { maxRepairs: 3 } };
-  const mk = (found: boolean, source: "cli" | "builtin", values: string[]): ProviderInfo => ({ type: "x", command: "x", found: found ? { path: "/x", via: "path" } : null, models: { source, options: values.map((v) => ({ value: v, label: v })) } });
-  const info = { copilot: mk(true, "cli", ["nuevo"]), claude: mk(true, "builtin", ["opus"]), codex: mk(false, "builtin", []) };
+  const mk = (found: boolean, source: "cli" | "api" | "partial" | "none", values: string[]): ProviderInfo => ({ type: "x", command: "x", found: found ? { path: "/x", via: "path" } : null, models: { source, options: values.map((v) => ({ value: v, label: v })) } });
+  const info = { copilot: mk(true, "cli", ["nuevo"]), claude: mk(true, "partial", ["opus"]), codex: mk(false, "none", []) };
   const p = aiProblems(cfg as never, info);
   assert.deepEqual(p.map((x) => `${x.stage}:${x.reason}`), ["discover:model-unknown", "mocks:tool-missing"]);
   assert.deepEqual(aiProblems(cfg as never, info, ["flows"]), []);
@@ -78,4 +78,10 @@ test("parseCopilotConfigModels lee los modelos del ajuste «model» de `copilot 
   ].join("\n");
   assert.deepEqual(parseCopilotConfigModels(txt), ["claude-sonnet-4.5", "gpt-5-mini", "gpt-4.1", "claude-haiku-4.5"]);
   assert.deepEqual(parseCopilotConfigModels("nada"), []);
+});
+
+test("parseModelAliases saca solo alias de `claude --help`, sin ejemplos con versión", () => {
+  const help = `  --model <model>   Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'claude-sonnet-4-5-20250929').\n  --fallback-model <m>  Enable fallback`;
+  assert.deepEqual(parseModelAliases(help), ["sonnet", "opus"]);
+  assert.deepEqual(parseModelAliases("nada"), []);
 });

@@ -30,14 +30,14 @@
   }
 
   // Configuración básica por herramienta: modelo de cada etapa (potente para descubrir/mocks/reparar, barato para flujos).
-  // Claude trae alias fijos; Copilot elige uno económico de SU lista si lo hay; Codex usa el modelo de su config.toml.
+  // Solo se propone un modelo que esté en la lista real de la herramienta; si no hay, queda «Predeterminado». Nada va escrito a mano.
   var PRESET = { claude: { discover: "sonnet", flows: "haiku", mocks: "sonnet", repair: "sonnet" } };
   function preset(provider, info, ids) {
     var i = info[provider] || {}, opts = (i.models && i.models.options) || [], base = PRESET[i.type] || {}, out = {};
     ids.forEach(function (id) {
       var m = base[id];
       if (!m && i.type === "copilot" && id === "flows") { var cheap = opts.filter(function (o) { return /mini|haiku|flash|lite/i.test(o.value); })[0]; m = cheap && cheap.value; }
-      var o = { provider: provider }; if (m && (!opts.length || opts.some(function (x) { return x.value === m; }))) o.model = m; out[id] = o;
+      var o = { provider: provider }; if (m && opts.some(function (x) { return x.value === m; })) o.model = m; out[id] = o;
     });
     return out;
   }
@@ -70,7 +70,7 @@
     Object.keys(stages).forEach(function (st) {
       var sc = stages[st], i = info[sc.provider];
       if (!i || !i.found) out.push({ stage: st, provider: sc.provider, message: "«" + sc.provider + "» no está instalada o no se encuentra" });
-      else if (sc.model && i.models && i.models.source === "cli" && i.models.options.length && !i.models.options.some(function (o) { return o.value === sc.model; })) out.push({ stage: st, provider: sc.provider, message: "el modelo «" + sc.model + "» ya no está disponible en " + sc.provider });
+      else if (sc.model && i.models && (i.models.source === "cli" || i.models.source === "api") && i.models.options.length && !i.models.options.some(function (o) { return o.value === sc.model; })) out.push({ stage: st, provider: sc.provider, message: "el modelo «" + sc.model + "» ya no está disponible en " + sc.provider });
     });
     return out;
   }
