@@ -1,6 +1,6 @@
 {
   "name": "chip-chop",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "Capture every UI state of a web app on two git refs and compare them: pixels, accessibility tree, requests and flow graph.",
   "license": "MIT",
   "type": "module",

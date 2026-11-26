@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [v0.4.10](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.10) - 2026-11-26
+### Fixed
+- **«Actualizar ahora» del aviso de versión nueva ahora actualiza de verdad** (antes solo cambiaba de pestaña): abre la misma ventana de progreso que el botón Actualizar. **Si `pkexec` no puede elevar permisos** (error «pkexec must be setuid root», típico al abrir la app desde la terminal de un editor en snap/flatpak) se abre una terminal para escribir la contraseña con `sudo` y la actualización continúa; si tampoco hay terminal, se deja el paquete descargado y se explica el comando.
+
 ## [v0.4.9](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.9) - 2026-11-26
 ### Fixed
 - **Las listas de modelos ya no van escritas a mano:** salen siempre de la herramienta. Copilot: de `copilot help` y `copilot help config`; Claude: de los alias que documenta `claude --help` y, con `ANTHROPIC_API_KEY`, de la API de Anthropic (`/v1/models`); Codex no publica lista. Si no se puede leer, solo se ofrece «Predeterminado» y «Otro…» con un aviso que lo explica, en vez de una lista que se queda atrás y falla (p. ej. un modelo que tu plan no tiene). Los modelos de la configuración básica solo se proponen si están en la lista real.
