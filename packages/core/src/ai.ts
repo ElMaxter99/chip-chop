@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { needsShell, quoteForCmd, resolveCommand } from "./tools.js";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { exists, readStructured } from "./fsutil.js";
 import { chipDir } from "./paths.js";
 import type { AiSettings, ProviderConfig, StageConfig, StageName } from "./types.js";
 import { formatIssues, validateAgainst, validateCatalogDir } from "./validate.js";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describeEvent, formatUsage, parseOutput, recordRun, type AiUsage, type ParserKind, type StageRun } from "./aiUsage.js";
 
 export const STAGES: StageName[] = ["discover", "flows", "mocks", "repair"];
@@ -153,8 +153,10 @@ each with a responseSchema inferred from the code and a matching response. Inclu
 {{extra}}`,
 };
 
+const CATALOG_ONLY = "Write only the catalog files requested for this stage. Do not create documentation, summaries, checklists or other deliverables, even inside .chipchop. Report the outcome briefly in your response.";
+
 export function promptFor(stage: StageName, appDir: string, vars: { extra?: string; problems?: string }, promptsDir?: string): string {
-  let t = DEFAULT_PROMPTS[stage];
+  let t = `${DEFAULT_PROMPTS[stage]}\n${CATALOG_ONLY}`;
   if (promptsDir) {
     const dir = promptsDir.startsWith("/") ? promptsDir : join(appDir, promptsDir);
     const f = join(dir, `${stage}.md`);
@@ -196,16 +198,33 @@ export async function runAi(opts: AiRunOptions): Promise<{ ok: boolean; issues: 
     log(`  uso: ${formatUsage(r.usage)} · ${(rec.ms / 1000).toFixed(0)} s`);
     if (r.code !== 0) throw new Error(`${stage} stage failed (exit ${r.code})`);
   };
-  for (const s of stages) await run(s, { extra: opts.extra });
+  for (const s of stages) {
+    if (s !== "repair" || opts.dryRun) await run(s, { extra: opts.extra });
+  }
   if (opts.dryRun) return { ok: true, issues: "", runs };
-  for (let i = 0; i <= cfg.settings.maxRepairs; i++) {
+  const maxRepairs = stages.includes("repair") ? Math.max(1, cfg.settings.maxRepairs) : cfg.settings.maxRepairs;
+  for (let i = 0; i <= maxRepairs; i++) {
     const issues = validateCatalogDir(opts.appDir);
     const errors = issues.filter((x) => x.severity === "error");
     if (errors.length === 0) return { ok: true, issues: "", runs };
     const text = formatIssues(errors);
-    if (i === cfg.settings.maxRepairs) return { ok: false, issues: text, runs };
-    log(`validation found ${errors.length} problem(s); repair attempt ${i + 1}/${cfg.settings.maxRepairs}`);
-    await run("repair", { problems: text, extra: opts.extra });
+    if (i === maxRepairs) return { ok: false, issues: text, runs };
+    log(`validation found ${errors.length} problem(s); repair attempt ${i + 1}/${maxRepairs}`);
+    // Copilot takes the prompt as an argument. Keep large diagnostics off the command line.
+    if (Buffer.byteLength(text, "utf8") <= 4000) {
+      await run("repair", { problems: text, extra: opts.extra });
+      continue;
+    }
+    const dir = mkdtempSync(join(chipDir(opts.appDir), ".repair-"));
+    try {
+      writeFileSync(join(dir, "diagnostics.txt"), text, { mode: 0o600 });
+      const path = `.chipchop/${basename(dir)}/diagnostics.txt`;
+      const problems = `Read "${path}" for all ${errors.length} validation errors. Read it in sections if needed. Fix the catalog files listed there. Do not edit the diagnostics file.`;
+      log(`  diagnósticos de reparación en ${path}`);
+      await run("repair", { problems, extra: opts.extra });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
   return { ok: false, issues: "", runs };
 }

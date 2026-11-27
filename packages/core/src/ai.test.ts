@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -70,6 +70,41 @@ if (prompt.startsWith("chip-chop validate")) {
   const r = await runAi({ appDir: dir, stages: ["mocks"], log: (l) => lines.push(l) });
   assert.ok(lines.some((l) => l.includes("repair attempt")), lines.join("\n"));
   assert.equal(r.ok, true, r.issues);
+});
+
+test("repair-only passes a large catalog error list by file and removes it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-repair-"));
+  process.env.CHIPCHOP_HOME = join(dir, "home");
+  try {
+    initProject(dir, { framework: "other", force: false });
+    const states = join(dir, ".chipchop", "states.yaml");
+    writeFileSync(join(dir, "valid-states.yaml"), readFileSync(states));
+    const mocks = Array.from({ length: 2225 }, (_, i) => `missing-mock-${i}`);
+    writeFileSync(states, JSON.stringify({ states: [{ id: "home", kind: "page", title: "Home", url: "/", mocks }] }));
+    writeFileSync(join(dir, "fake-ai.mjs"), `import assert from "node:assert/strict";
+import { copyFileSync, readFileSync } from "node:fs";
+const prompt = process.argv[2];
+assert.ok(Buffer.byteLength(prompt) < 4000);
+const path = /Read "([^"]+diagnostics[.]txt)"/.exec(prompt)?.[1];
+assert.ok(path);
+const diagnostics = readFileSync(path, "utf8");
+assert.match(diagnostics, /missing-mock-2224/);
+assert.ok(Buffer.byteLength(diagnostics) > 128 * 1024);
+copyFileSync("valid-states.yaml", ".chipchop/states.yaml");
+`);
+    writeText(join(dir, ".chipchop", "ai.yaml"), `providers:
+  fake: { type: custom, command: node, args: ["fake-ai.mjs", "{prompt}"] }
+stages:
+  repair: { provider: fake }
+settings: { maxRepairs: 0 }
+`);
+    const result = await runAi({ appDir: dir, stages: ["repair"] });
+    assert.equal(result.ok, true, result.issues);
+    assert.deepEqual(result.runs.map((run) => run.stage), ["repair"]);
+    assert.ok(!readdirSync(join(dir, ".chipchop")).some((name) => name.startsWith(".repair-")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("codex: exec por stdin, sandbox que permite escribir .chipchop y modelo opcional", () => {

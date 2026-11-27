@@ -11,9 +11,9 @@
 
   var branchPair = null, validation = null;
 
-  function api(path, method, body) {
+  function api(path, method, body, keepalive) {
     return fetch(path + (path.indexOf("?") < 0 ? "?" : "&") + "token=" + token, {
-      method: method || "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined
+      method: method || "GET", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined, keepalive: !!keepalive
     }).then(function (r) { return r.json().then(function (j) { if (!r.ok) { var er = new Error(j.error || r.status); er.code = j.code; er.problems = j.problems; throw er; } return j; }); });
   }
   // Runs a background job and streams its log into <pre id=logId>.
@@ -100,6 +100,9 @@
   }
   function setBranch(side, ref) {
     branchPair[side] = ref;
+    api("/api/project/branches", "PUT", { side: side, ref: ref }, true).catch(function (e) {
+      notify(e, "No se pudo guardar la rama");
+    });
     [side, "project-" + side].forEach(function (id) {
       var input = $(id);
       if (!input) return;
@@ -373,7 +376,13 @@
 
   // ---------- start ----------
   function load() {
-    return api("/api/project").then(function (p) { project = p; var refs = p.refs ? p.refs.branches.concat(p.refs.tags) : []; if (!branchPair) branchPair = { base: refs[0] || "", head: refs[1] || refs[0] || "" }; return api("/api/ai").then(function (c) { ai = c; }, function () {}); }).then(function () { return api("/api/ai/info").then(function (i) { aiInfo = i; }, function () {}); }).then(function () { renderProject(); renderCompare(); renderBanner(); });
+    return api("/api/project").then(function (p) {
+      project = p;
+      var refs = p.refs ? p.refs.branches.concat(p.refs.tags) : [];
+      var saved = p.branchPair || {};
+      if (!branchPair) branchPair = { base: saved.base || refs[0] || "", head: saved.head || refs[1] || refs[0] || "" };
+      return api("/api/ai").then(function (c) { ai = c; }, function () {});
+    }).then(function () { return api("/api/ai/info").then(function (i) { aiInfo = i; }, function () {}); }).then(function () { renderProject(); renderCompare(); renderBanner(); });
   }
   load().then(checkUpdate).catch(function (e) { document.body.insertAdjacentHTML("beforeend", '<main><div class="banner er"><strong>No se pudo conectar.</strong><span class="grow">' + esc(e.message) + " Abre el enlace que imprime chip-chop ui.</span></div></main>"); });
 })();
