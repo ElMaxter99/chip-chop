@@ -8,8 +8,8 @@ import { makeRepo } from "./demoRepo.js";
 import { startUi } from "./server.js";
 
 test("local app: generation validates both selected branches before comparison", { timeout: 300000 }, async () => {
-  process.env.CHIPCHOP_HOME = makeRepo() + "-home";
   const dir = makeRepo();
+  process.env.CHIPCHOP_HOME = join(dir, "chipchop-home");
   const fakeAi = join(dir, "fake-ai.mjs");
   writeFileSync(fakeAi, `import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,10 +19,10 @@ assert.ok(readFileSync(0, "utf8").includes('{"base":"develop","head":"restyle"}'
     providers: { test: { type: "custom", command: process.execPath, args: [fakeAi], promptVia: "stdin" } },
     stages: Object.fromEntries(["discover", "flows", "mocks", "repair"].map((stage) => [stage, { provider: "test" }])),
   }));
-  const ui = await startUi(dir);
+  let ui = await startUi(dir);
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    let page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
     await page.goto(ui.url);
     await page.getByRole("heading", { name: "Preparar la app" }).waitFor();
     assert.ok((await page.locator("#app").textContent())?.length);
@@ -35,10 +35,22 @@ assert.ok(readFileSync(0, "utf8").includes('{"base":"develop","head":"restyle"}'
       await combo.locator(".md-search").fill(query);
       await combo.getByRole("option", { name: ref, exact: true }).waitFor();
       assert.equal(await combo.getByRole("option", { name: "feature", exact: true }).count(), 0);
-      await combo.locator(".md-search").press("Enter");
+      const [, saved] = await Promise.all([
+        combo.locator(".md-search").press("Enter"),
+        page.waitForResponse((response) => new URL(response.url()).pathname === "/api/project/branches"),
+      ]);
+      assert.equal(saved.status(), 200);
       assert.equal(await page.locator(`#${id}`).inputValue(), ref);
       assert.equal(await combo.locator(".md-trigger").getAttribute("aria-expanded"), "false");
     }
+    await page.context().close();
+    await ui.close();
+    ui = await startUi(dir);
+    page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    await page.goto(ui.url);
+    await page.locator("#project-head").waitFor({ state: "attached" });
+    assert.equal(await page.locator("#project-base").inputValue(), "develop");
+    assert.equal(await page.locator("#project-head").inputValue(), "restyle");
     await page.locator("#gen").click();
     await page.getByText("10 pares de capturas comparables").waitFor({ timeout: 120000 });
     await page.locator(".runmodal [data-m=x]").click();

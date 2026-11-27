@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import { loadAiConfig, runAi, testProvider } from "./ai.js";
 import { summarizeUsage } from "./aiUsage.js";
@@ -14,7 +14,7 @@ import { exists, writeText } from "./fsutil.js";
 import { initProject } from "./init.js";
 import { runCapture, runCompare, validateCaptures } from "./pipeline.js";
 import { listRefs } from "./runner.js";
-import { chipDir, uiDir } from "./paths.js";
+import { chipDir, globalDir, uiDir } from "./paths.js";
 import type { StageName } from "./types.js";
 import { formatIssues, validateCatalogDir } from "./validate.js";
 import { stringify } from "yaml";
@@ -47,6 +47,13 @@ export interface UiOptions {
 
 export async function startUi(appDir: string, port = 0, options: UiOptions = {}): Promise<UiServer> {
   const token = randomBytes(16).toString("hex");
+  const projectPath = exists(appDir) ? realpathSync.native(appDir) : resolve(appDir);
+  const projectKey = createHash("sha256").update(projectPath).digest("hex");
+  const selectionDir = join(globalDir(), "project-branches", projectKey);
+  const readBranch = (side: "base" | "head"): string | undefined => {
+    const file = join(selectionDir, side);
+    return exists(file) ? readFileSync(file, "utf8") : undefined;
+  };
   const jobs = new Map<string, Job>();
   let current: Job | undefined;
 
@@ -131,7 +138,23 @@ export async function startUi(appDir: string, port = 0, options: UiOptions = {})
             return { states: 0, flows: 0, mocks: 0 };
           }
         })();
-        return void send(res, 200, { appDir, version: currentVersion(), hasCatalog: hasCatalog(appDir), counts, refs, reports });
+        const branchPair = { base: readBranch("base"), head: readBranch("head") };
+        return void send(res, 200, { appDir, version: currentVersion(), hasCatalog: hasCatalog(appDir), counts, refs, reports, branchPair });
+      }
+      if (u.pathname === "/api/project/branches" && req.method === "PUT") {
+        const { side, ref } = await body(req);
+        if ((side !== "base" && side !== "head") || typeof ref !== "string" || !ref.trim()) {
+          return void send(res, 400, { error: "La selección de rama no es válida." });
+        }
+        const file = join(selectionDir, side);
+        const pending = file + "." + randomBytes(8).toString("hex");
+        try {
+          writeText(pending, ref.trim());
+          renameSync(pending, file);
+        } finally {
+          rmSync(pending, { force: true });
+        }
+        return void send(res, 200, { ok: true });
       }
       if (u.pathname === "/api/reports" && req.method === "GET") {
         const list = (exists(reportsRoot) ? readdirSync(reportsRoot) : [])
