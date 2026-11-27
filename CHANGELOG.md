@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [v0.4.17](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.17) - 2026-11-27
+### Fixed
+- Chip-chop guarda la rama base y la rama a comparar por proyecto y recupera la selección al volver a abrirlo.
+- La reparación por IA pasa los diagnósticos grandes en un archivo temporal para evitar errores de longitud del comando. Puedes ejecutar solo la reparación con `chip-chop ai run repair` y conservar el catálogo generado.
+
 ## [v0.4.16](https://github.com/ElMaxter99/chip-chop/releases/tag/v0.4.16) - 2026-11-26
 ### Fixed
 - La vista Proyecto usa los mismos desplegables con buscador de ramas y etiquetas que Comparar.
